@@ -25,9 +25,9 @@ import java.lang.reflect.Method;
 public class KeyDispatcher {
     public static void main(String[] args) {
         try {
-            // android.hardware.input.InputManager + injectInputEvent are hidden APIs.
-            // Shell uid bypasses Android 10's hidden-API restrictions, so reflection works.
-            Class<?> imClass = Class.forName("android.hardware.input.InputManager");
+            // android.hardware.input.InputManagerGlobal + injectInputEvent are hidden APIs.
+            // Shell uid bypasses hidden-API restrictions, so reflection works.
+            Class<?> imClass = Class.forName("android.hardware.input.InputManagerGlobal");
             Method getInstance = imClass.getMethod("getInstance");
             Object im = getInstance.invoke(null);
             Method injectInputEvent = imClass.getMethod(

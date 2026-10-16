@@ -2,7 +2,7 @@
 
 <p align="center"><img src="docs/demo.gif" alt="Xgimi Bridge web app in action" width="300"></p>
 
-Background-only Android service for an **Xgimi Horizon Pro** projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
+Background-only Android service for an **XGIMI Horizon 20** projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
 
 - HTTP API on port **8080**
 - Web UI on the same port — works in any modern mobile or desktop browser; add to your phone's home screen (iOS Safari "Add to Home Screen", Android Chrome "Install app") for a standalone-app feel. The bridge sets long `Cache-Control` headers on the hashed asset bundle so the OS keeps the shell on disk after first load. A "Disconnected" badge surfaces in the header when the bridge is unreachable.
@@ -11,14 +11,14 @@ Background-only Android service for an **Xgimi Horizon Pro** projector that expo
 
 > **Note on offline behaviour**: the bridge serves over plain HTTP, so a service worker can't register (browsers require HTTPS for SW registration). Offline-shell caching relies on the browser's home-screen / installed-app cache plus our `Cache-Control: immutable` headers. Effective for the typical "projector asleep / Wi-Fi blip" case, less so when the OS evicts the cache. If you want a true SW-backed offline shell, terminate the bridge behind HTTPS yourself (self-signed cert + per-device trust install).
 
-> **Tested device**: Xgimi Horizon Pro on **Android 10** (MT9669, kernel 4.19, security patch 2022-09-05). Other Xgimi models or firmware revisions probably need tweaks — keycodes for power / gear / focus, the `com.xgimi.misckey` and `com.xgimi.xhplayer` package names, and the `com.xgimi.xgimiservice` AIDL surface are all derived from this specific firmware. The web client itself is browser-based and not tied to any particular phone OS.
+> **Tested device**: XGIMI Horizon 20 on **Android 14 (Google TV, MT9689)**. The `com.xgimi.xgimiservice` AIDL surface is derived from this specific firmware. The web client itself is browser-based and not tied to any particular phone OS.
 
 ## What works
 
 - D-pad / OK / back / home / menu — full remote navigation
 - Volume up / down / mute
 - Power (display on/off, same toggle as the physical remote)
-- Settings / gear (opens Xgimi's misckey panel)
+- Settings / gear (opens Google TV settings dashboard)
 - Auto-focus
 - Google Assistant key
 - Source switch (Apps / HDMI 1 / HDMI 2)
@@ -43,7 +43,7 @@ Web client  ──HTTP──▶  Bridge (untrusted_app)
                        ▼
                 shell-uid session  ──spawns──▶  app_process running KeyDispatcher
                                                           │
-                                                          │  IInputManager.injectInputEvent
+                                                          │  InputManagerGlobal.injectInputEvent
                                                           │  (shell uid has INJECT_EVENTS)
                                                           ▼
                                                     KeyEvent to active window
@@ -51,13 +51,13 @@ Web client  ──HTTP──▶  Bridge (untrusted_app)
 
 On first run the bridge generates an RSA-2048 keypair, opens a TCP connection to `127.0.0.1:5555`, and speaks the ADB protocol. The server-side acceptance flow surfaces the standard "Allow USB debugging from this computer?" prompt on the TV — the user clicks Allow + Always **once**, with the physical remote. From that point on the bridge has shell-uid execution.
 
-`KeyDispatcher` is a small Java class loaded into a long-lived `app_process` JVM via the bridge's own APK on the classpath. It loops on stdin reading keycode integers and calls `IInputManager.injectInputEvent` reflectively (it's a hidden API; shell uid bypasses the hidden-API restriction). One JVM cold-start per bridge run, then ~5 ms per keypress.
+`KeyDispatcher` is a small Java class loaded into a long-lived `app_process` JVM via the bridge's own APK on the classpath. It loops on stdin reading keycode integers and calls `InputManagerGlobal.injectInputEvent` reflectively (it's a hidden API; shell uid bypasses the hidden-API restriction). One JVM cold-start per bridge run, then ~5 ms per keypress.
 
 A handful of keys do not go through the dispatcher because they are intercepted by Xgimi's `PhoneWindowManager.interceptKeyBeforeDispatching` and route to specific services:
 
-- **Power (KEYCODE_XGIMI_POWER = 2100)** — toggles display sleep/wake via `XgimiActionCommon.doAction → GmTvManager.getWakeUpSource`. Going through `injectInputEvent` triggers this hook the same way a physical button does.
-- **Settings / gear (KEYCODE_XGIMI_MISCKEY = 2101)** — opens `com.xgimi.misckey` panel via `XgimiActionCommon.doAction → startService(misckey)`.
-- **Auto-focus (KEYCODE_XGIMI_AUTOFOCUS = 2099)** — invokes `IProjectorFocusManager.Send AUTO_FOCUS`.
+- **Power (`KEYCODE_POWER` = 26)** — toggles display sleep/wake.
+- **Settings / gear (`KEYCODE_SETTINGS` = 176)** — opens the Google TV settings dashboard.
+- **Auto-focus (`KEYCODE_F10` = 140)** — triggers `XgimiGlobalKeyBroadcast.gotoAF` to run projector auto-focus.
 
 These all just go through the normal `injectKey` path; the Xgimi WindowManager catches them upstream of normal dispatch.
 
@@ -99,7 +99,7 @@ Prebuilt APKs are attached to each [GitHub Release](https://github.com/andotsy/x
 
 ## Prerequisites
 
-- Android SDK with `build-tools/34.0.0` and `platforms/android-29`. Set `ANDROID_SDK_ROOT` (defaults to `/opt/android-sdk`).
+- Android SDK with `build-tools/34.0.0` and `platforms/android-34`. Set `ANDROID_SDK_ROOT` (defaults to `/opt/android-sdk`).
 - JDK 17.
 - Node + npm (for the web build).
 - `adb` reachable, paired with the projector over Wi-Fi (port 5555). Projector ADB confirmation already accepted on the device.
@@ -186,7 +186,7 @@ Remote (ADB-loopback / KeyDispatcher):
 ## Notes / known quirks
 
 - **WB sliders only visibly affect the picture on color-temp slot 0.** HDMI + game mode is the typical combination that lands there. Other combinations write to slot 0 successfully but you won't see the change.
-- **AIDL `switchToSignalSource` is a stub** on this firmware. The bridge instead fires `Intent("com.xgimi.action.hdmiPlayer")` at `com.xgimi.xhplayer/.InputActivity` with `extra sw=HDMI1|HDMI2|HDMI3`. Apps/Storage uses `tvlauncher.MainActivity`.
+- **AIDL `switchToSignalSource` is a stub** on this firmware. The bridge instead switches HDMI inputs via `TvContract.buildChannelUriForPassthroughInput` on the root hardware `TvInputInfo`, and switches Home/Apps via `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` (stopping `com.google.android.tv.inputplayer`).
 - **BAL bypass for the input switch** requires the `SYSTEM_ALERT_WINDOW` appop (granted by `install.sh`). The grant survives until reboot; on a fresh boot you'd need to re-run `install.sh` only if you want the cold-start input switch to work — the rest of the bridge functions normally.
 - **`xgimi.local` resolution** uses mDNS / Bonjour. iOS, macOS, and most Android builds with NSD resolve it natively in browsers. Some shell tools can't resolve `.local` via `getaddrinfo` — use the IP directly, or query mDNS explicitly (`dns-sd -G v4 xgimi.local` on macOS, `avahi-resolve -n xgimi.local` on Linux).
 - **The bridge needs ADB-over-TCP enabled on the projector** to authorize itself. Anyone else on the same LAN who can reach port 5555 already has full ADB access — this isn't worse than what ADB-over-TCP already gives you.
@@ -203,10 +203,10 @@ The Vite build writes directly into `app/assets/web/`, which `build.sh` zips int
 
 The web client uses standard Android keycodes for most buttons (`KEYCODE_DPAD_*`, `KEYCODE_BACK`, `KEYCODE_VOLUME_*`, etc.) and a few Xgimi-custom ones:
 
-| Keycode | Constant                  | Triggered by                              |
-|---------|---------------------------|-------------------------------------------|
-| 2099    | `KEYCODE_XGIMI_AUTOFOCUS` | Physical focus button                     |
-| 2100    | `KEYCODE_XGIMI_POWER`     | Physical power button                     |
-| 2101    | `KEYCODE_XGIMI_MISCKEY`   | Physical gear / settings button           |
+| Keycode | Constant           | Triggered by                              |
+|---------|--------------------|-------------------------------------------|
+| 140     | `KEYCODE_F10`      | Physical focus button                     |
+| 26      | `KEYCODE_POWER`    | Physical power button                     |
+| 176     | `KEYCODE_SETTINGS` | Physical gear / settings button           |
 
 These pass through `injectInputEvent` and Xgimi's `PhoneWindowManager` intercept routes them the same way the physical remote does.

@@ -2,7 +2,7 @@
 set -e
 ASR="${ANDROID_SDK_ROOT:-/opt/android-sdk}"
 BT=$ASR/build-tools/34.0.0
-PLATFORM=$ASR/platforms/android-29/android.jar
+PLATFORM=$ASR/platforms/android-34/android.jar
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 NANO=$PROJ/lib/nanohttpd-2.3.1.jar
 JMDNS=$PROJ/lib/jmdns-3.4.1.jar
@@ -24,7 +24,7 @@ echo "[3/5] aapt2 link (manifest, no resources)"
 $BT/aapt2 link \
     --manifest $PROJ/AndroidManifest.xml \
     -I $PLATFORM \
-    --min-sdk-version 29 --target-sdk-version 29 \
+    --min-sdk-version 34 --target-sdk-version 34 \
     -o $OUT/base.apk
 
 echo "[4/5] inject classes.dex + assets/"

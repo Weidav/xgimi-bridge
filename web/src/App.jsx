@@ -61,8 +61,12 @@ function PinIcon() {
 
 function inputLabelForPort(inputs, port, fallback) {
   if (!Array.isArray(inputs)) return fallback;
-  const match = inputs.find((i) => i.hdmiPortId === port && (i.displayName || i.label));
-  return (match && (match.displayName || match.label)) || fallback;
+  for (const i of inputs) {
+    if (i.hdmiPortId !== port) continue;
+    const name = (i.displayName || i.label || "").trim();
+    if (name && !/^hdmi\s*\d+$/i.test(name)) return name;
+  }
+  return fallback;
 }
 
 function epToField(ep) {
@@ -90,14 +94,13 @@ function clamp(n) { if (typeof n !== "number") return 50; return Math.max(0, Mat
 function rrr(n) { return Math.round(80 + (n / 100) * 175); }
 
 // Android KeyEvent codes used by the virtual remote.
-// SETTINGS = 2101 is Xgimi's KEYCODE_XGIMI_MISCKEY — the actual gear button on the physical
-// remote. Standard 176 (KEYCODE_SETTINGS) does nothing on this device. The bridge has a
-// special-case for 2101 that routes via shell uid (am startservice misckey).
+// SETTINGS = 176 (KEYCODE_SETTINGS) opens the Google TV Settings dashboard.
+// FOCUS = 140 (KEYCODE_F10) triggers XgimiGlobalKeyBroadcast.gotoAF on Android 14.
 const KEY = {
   DPAD_UP: 19, DPAD_DOWN: 20, DPAD_LEFT: 21, DPAD_RIGHT: 22, DPAD_CENTER: 23,
   BACK: 4, HOME: 3, MENU: 82,
   VOLUME_UP: 24, VOLUME_DOWN: 25, VOLUME_MUTE: 164,
-  SETTINGS: 2101, ASSIST: 219, FOCUS: 2099,
+  SETTINGS: 176, ASSIST: 219, FOCUS: 140,
 };
 
 export default function App() {
@@ -404,12 +407,11 @@ export default function App() {
     finally { setBusy(false); }
   }
 
-  // KEYCODE_XGIMI_POWER. Going through the keyevent path (rather than the POWER_WINDOW
-  // intent that opens the power menu) means Xgimi's WindowManager intercept toggles display
-  // standby exactly the way the physical remote's power button does — single press off when
+  // KEYCODE_POWER (26). Going through the keyevent path toggles display
+  // standby the same way the physical remote's power button does — single press off when
   // on, single press wakes when off.
   async function pressPower() {
-    try { await liveCall(`/api/adb/keyevent/2100`, { method: "POST" }, 3000); }
+    try { await liveCall(`/api/adb/keyevent/26`, { method: "POST" }, 3000); }
     catch (e) { setErr(String(e)); }
   }
 

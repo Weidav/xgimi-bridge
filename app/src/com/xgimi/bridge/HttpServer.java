@@ -80,7 +80,7 @@ public class HttpServer extends NanoHTTPD {
                             o.put("label", label != null ? label.toString() : null);
                             CharSequence custom = info.loadCustomLabel(ctx);
                             o.put("customLabel", custom != null ? custom.toString() : null);
-                            // Reflectively access HdmiDeviceInfo (hidden API on Android 10)
+                            // Reflectively access HdmiDeviceInfo (hidden @SystemApi)
                             try {
                                 java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
                                 Object hdi = m1.invoke(info);
@@ -169,7 +169,7 @@ public class HttpServer extends NanoHTTPD {
 
     /**
      * One power action — restart — that doesn't have a keyevent equivalent. Display off / on
-     * is now handled via the regular keyevent path (KEYCODE_XGIMI_POWER = 2100).
+     * is now handled via the regular keyevent path (KEYCODE_POWER = 26).
      *
      *   restart — sys.powerctl=reboot via the system-uid AIDL setSystemProperties broker call.
      */
@@ -236,20 +236,8 @@ public class HttpServer extends NanoHTTPD {
         JSONObject body = readJsonBody(session);
         String to = body.optString("to", "").toUpperCase();
 
-        // /api/input/picker or empty body -> show picker
-        if (uri.equals("/api/input/picker") || to.isEmpty()) {
-            try {
-                android.content.Intent it = new android.content.Intent();
-                it.setComponent(new android.content.ComponentName(
-                    "com.google.android.tvlauncher",
-                    "com.google.android.tvlauncher.inputs.InputsPanelActivity"));
-                it.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(it);
-                return json(Response.Status.OK, "{\"ok\":true,\"opened\":\"picker\"}");
-            } catch (Throwable t) {
-                Log.e(TAG, "picker launch failed", t);
-                return json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
-            }
+        if (to.isEmpty()) {
+            return json(Response.Status.BAD_REQUEST, errJson("missing to"));
         }
 
         try {
@@ -257,25 +245,24 @@ public class HttpServer extends NanoHTTPD {
                 // Kill the HDMI playback activity (otherwise its TvView keeps the pipeline)
                 try {
                     android.app.ActivityManager am = (android.app.ActivityManager) ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE);
-                    am.killBackgroundProcesses("com.xgimi.xhplayer");
+                    am.killBackgroundProcesses("com.google.android.tv.inputplayer");
                 } catch (Throwable ignore) {}
-                // Bring launcher MainActivity to front
-                android.content.Intent home = new android.content.Intent();
-                home.setComponent(new android.content.ComponentName(
-                    "com.google.android.tvlauncher",
-                    "com.google.android.tvlauncher.MainActivity"));
+                // Bring Google TV home launcher to front
+                android.content.Intent home = new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                    .addCategory(android.content.Intent.CATEGORY_HOME);
                 home.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                    | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    | android.content.Intent.FLAG_ACTIVITY_TASK_ON_HOME);
+                    | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 ctx.startActivity(home);
                 return json(Response.Status.OK, "{\"ok\":true,\"to\":\"STORAGE\"}");
             }
             if (!to.matches("HDMI[1-3]")) {
                 return json(Response.Status.BAD_REQUEST, errJson("invalid to: " + to));
             }
-            android.content.Intent it = new android.content.Intent("com.xgimi.action.hdmiPlayer");
-            it.setComponent(new android.content.ComponentName("com.xgimi.xhplayer", "com.xgimi.xhplayer.InputActivity"));
-            it.putExtra("sw", to);
+            int port = Integer.parseInt(to.substring(4));
+            String inputId = findHdmiPassthroughInputId(port);
+            android.content.Intent it = new android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.media.tv.TvContract.buildChannelUriForPassthroughInput(inputId));
             it.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
             ctx.startActivity(it);
             return json(Response.Status.OK, "{\"ok\":true,\"to\":\"" + to + "\"}");
@@ -283,6 +270,28 @@ public class HttpServer extends NanoHTTPD {
             Log.e(TAG, "input switch failed", t);
             return json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
         }
+    }
+
+    private String findHdmiPassthroughInputId(int port) {
+        android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
+            ctx.getSystemService(android.content.Context.TV_INPUT_SERVICE);
+        if (tim == null) return null;
+        String fallback = null;
+        for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
+            try {
+                java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
+                Object hdi = m1.invoke(info);
+                if (hdi != null) {
+                    java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
+                    Object pid = getPortId.invoke(hdi);
+                    if (pid instanceof Integer && ((Integer) pid).intValue() == port) {
+                        if (info.getParentId() == null) return info.getId();
+                        if (fallback == null) fallback = info.getId();
+                    }
+                }
+            } catch (Throwable ignore) {}
+        }
+        return fallback;
     }
 
     private Response handlePresets(IHTTPSession session, String uri) throws IOException {
