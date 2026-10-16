@@ -109,6 +109,7 @@ export default function App() {
   const connectedRef = useRef(connected);
   connectedRef.current = connected;
   const [sourceOpen, setSourceOpen] = useState(false);
+  const [powerOpen, setPowerOpen] = useState(false);
   const [dialog, setDialog] = useState(null);
   const dialogResolverRef = useRef(null);
   /**
@@ -410,6 +411,31 @@ export default function App() {
     catch (e) { setErr(String(e)); }
   }
 
+  async function handlePowerAction(action) {
+    setPowerOpen(false);
+    if (action === "standby") {
+      await pressPower();
+      return;
+    }
+    if (action === "restart") {
+      const ok = await askConfirm({
+        title: "Restart projector",
+        message: "Reboot the projector now?",
+        okLabel: "Restart",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      await liveCall(`/api/power/${action}`, { method: "POST" }, 3000);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendKey(keyCode) {
     sendKeyDispatch(keyCode);
   }
@@ -433,7 +459,7 @@ export default function App() {
             <button className="hdr-btn hdr-src" onClick={() => setSourceOpen(true)} aria-label="Choose source" disabled={busy}>
               <SourceIcon />
             </button>
-            <button className="hdr-btn hdr-power" onClick={pressPower} aria-label="Power" disabled={busy}>
+            <button className="hdr-btn hdr-power" onClick={() => setPowerOpen(true)} aria-label="Power" disabled={busy}>
               <PowerIcon />
             </button>
           </div>
@@ -539,6 +565,8 @@ export default function App() {
         />
       )}
 
+      {powerOpen && <PowerSheet busy={busy} onAction={handlePowerAction} onClose={() => setPowerOpen(false)} />}
+
       {dialog && <Dialog spec={dialog} onClose={closeDialog} />}
     </div>
   );
@@ -564,6 +592,37 @@ function SourceSheet({ inputs, picture, busy, onPick, onClose }) {
               </button>
             );
           })}
+        </div>
+        <div className="modal-actions">
+          <button className="modal-btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PowerSheet({ busy, onAction, onClose }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="power-sheet" role="dialog" aria-modal="true" aria-label="Power options">
+        <h3 className="modal-title">Power</h3>
+        <div className="power-list">
+          <button className="power-item" onClick={() => onAction("standby")} disabled={busy}>
+            <span className="power-item-label">Standby / Wake</span>
+            <span className="power-item-sub">Toggle display sleep (same as physical power button)</span>
+          </button>
+          <button className="power-item" onClick={() => onAction("led-off")} disabled={busy}>
+            <span className="power-item-label">Lamp off</span>
+            <span className="power-item-sub">Turn projector LED off while Android keeps running</span>
+          </button>
+          <button className="power-item" onClick={() => onAction("led-on")} disabled={busy}>
+            <span className="power-item-label">Lamp on</span>
+            <span className="power-item-sub">Turn projector LED back on</span>
+          </button>
+          <button className="power-item" onClick={() => onAction("restart")} disabled={busy}>
+            <span className="power-item-label" style={{ color: "var(--danger)" }}>Restart</span>
+            <span className="power-item-sub">Reboot the projector</span>
+          </button>
         </div>
         <div className="modal-actions">
           <button className="modal-btn" onClick={onClose}>Close</button>

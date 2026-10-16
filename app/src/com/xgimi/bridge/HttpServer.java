@@ -191,6 +191,12 @@ public class HttpServer extends NanoHTTPD {
         String action = uri.substring("/api/power/".length());
         try {
             switch (action) {
+                case "led-off":
+                    aidl.setLedOn(false);
+                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"led-off\"}");
+                case "led-on":
+                    aidl.setLedOn(true);
+                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"led-on\"}");
                 case "restart":
                     aidl.setSystemProperty("sys.powerctl", "reboot");
                     return json(Response.Status.OK, "{\"ok\":true,\"action\":\"restart\"}");
