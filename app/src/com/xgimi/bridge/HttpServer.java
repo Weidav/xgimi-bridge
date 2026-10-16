@@ -76,7 +76,12 @@ public class HttpServer extends NanoHTTPD {
 
         if (uri.equals("/api/state") && m == Method.GET) {
             JSONObject o = new JSONObject();
-            try { o.put("ready", aidl.isReady()).put("port", 8080).put("ts", System.currentTimeMillis()); } catch (JSONException e) {}
+            try {
+                o.put("ready", aidl.isReady())
+                 .put("awake", isAwake())
+                 .put("port", 8080)
+                 .put("ts", System.currentTimeMillis());
+            } catch (JSONException e) {}
             return json(Response.Status.OK, o.toString());
         }
         if (uri.equals("/api/inputs") && m == Method.GET) {
@@ -119,6 +124,7 @@ public class HttpServer extends NanoHTTPD {
         }
         if (uri.equals("/api/picture") && m == Method.GET) {
             java.util.Map<String,Object> snap = aidl.snapshot();
+            snap.put("awake", isAwake());
             // wrap nested maps as JSONObjects so JSONObject does not toString() them
             for (java.util.Map.Entry<String,Object> e : snap.entrySet()) {
                 if (e.getValue() instanceof java.util.Map) e.setValue(new JSONObject((java.util.Map) e.getValue()));
@@ -191,16 +197,43 @@ public class HttpServer extends NanoHTTPD {
         return sb.toString();
     }
 
+    private boolean isAwake() {
+        android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        return pm == null || pm.isInteractive();
+    }
+
     /**
-     * One power action — restart — that doesn't have a keyevent equivalent. Display off / on
-     * is now handled via the regular keyevent path (KEYCODE_POWER = 26).
-     *
-     *   restart — sys.powerctl=reboot via the system-uid AIDL setSystemProperties broker call.
+     * Power actions:
+     *   on       — idempotently wake display if currently asleep
+     *   off      — idempotently put display to sleep if currently awake
+     *   toggle   — toggle display sleep/wake (KEYCODE_POWER = 26)
+     *   led-off  — turn projector lamp off while Android keeps running
+     *   led-on   — turn projector lamp on
+     *   restart  — sys.powerctl=reboot via the system-uid AIDL setSystemProperties broker call
      */
     private Response handlePower(String uri) {
         String action = uri.substring("/api/power/".length());
         try {
             switch (action) {
+                case "on": {
+                    boolean awake = isAwake();
+                    if (!awake) {
+                        adb.injectKey(26);
+                    }
+                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"on\",\"awake\":true}");
+                }
+                case "off": {
+                    boolean awake = isAwake();
+                    if (awake) {
+                        adb.injectKey(26);
+                    }
+                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"off\",\"awake\":false}");
+                }
+                case "toggle":
+                case "standby": {
+                    adb.injectKey(26);
+                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"" + action + "\"}");
+                }
                 case "led-off":
                     aidl.setLedOn(false);
                     return json(Response.Status.OK, "{\"ok\":true,\"action\":\"led-off\"}");

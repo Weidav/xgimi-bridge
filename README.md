@@ -157,8 +157,8 @@ Worst-case latency from boot to `xgimi.local:8080` answering: ~90 seconds.
 
 State / picture / sources:
 
-- `GET  /api/state`                  `{ ready, port, ts }`
-- `GET  /api/picture`                full picture-quality snapshot
+- `GET  /api/state`                  `{ ready, awake, port, ts }`
+- `GET  /api/picture`                full picture snapshot (including `awake`, `pictureMode`, `colorTemp`, `gameMode`, etc.)
 - `GET  /api/inputs`                 current `TvInputManager` listing with CEC-derived names
 - `POST /api/picture/<knob>`         `{ "value": <int> }` — knobs: `wb-red`, `wb-green`, `wb-blue`, `color-temp`, `picture-mode`, `game-mode`, `brightness`, `contrast`, `saturation`, `sharpness`, `hue`
 - `POST /api/picture/reset`          `{ "mode": <int>, "force": <bool> }`
@@ -167,7 +167,7 @@ State / picture / sources:
 Presets (persist to `/data/data/com.xgimi.bridge/files/presets.json`):
 
 - `GET    /api/presets`
-- `POST   /api/presets`              `{ "name": "..." }` snapshots the current state
+- `POST   /api/presets`              `{ "name": "...", "values": {...} }`
 - `POST   /api/presets/<id>/apply`
 - `POST   /api/presets/<id>/sync`    refresh from current state
 - `PUT    /api/presets/<id>`         rename / replace
@@ -175,6 +175,11 @@ Presets (persist to `/data/data/com.xgimi.bridge/files/presets.json`):
 
 Power:
 
+- `POST /api/power/on`               idempotent turn on (wakes display if in standby)
+- `POST /api/power/off`              idempotent turn off (puts display into standby if awake)
+- `POST /api/power/toggle`           toggle display sleep/wake (KEYCODE_POWER = 26)
+- `POST /api/power/led-off`          turn projector lamp off while Android keeps running
+- `POST /api/power/led-on`           turn projector lamp back on
 - `POST /api/power/restart`          reboot the projector
 
 Remote (ADB-loopback / KeyDispatcher):
@@ -182,6 +187,21 @@ Remote (ADB-loopback / KeyDispatcher):
 - `GET  /api/adb/status`             `{ "authorized": bool }` — non-prompting probe
 - `POST /api/adb/authorize`          surfaces the on-screen Allow prompt; returns when accepted
 - `POST /api/adb/keyevent/<n>`       inject `KEYCODE_<n>` (Android keycode int)
+- `POST /api/adb/text`               `{ "text": "..." }` — inject arbitrary text
+
+## Home Assistant Integration
+
+A ready-to-use package is provided in [`homeassistant/xgimi_projector.yaml`](homeassistant/xgimi_projector.yaml).
+
+1. Copy [`homeassistant/xgimi_projector.yaml`](homeassistant/xgimi_projector.yaml) to your Home Assistant `config/packages/` directory.
+2. In the YAML, update the IP address (e.g. `192.168.3.209` or `xgimi.local`) to match your projector.
+3. Reload YAML configuration in Home Assistant.
+
+This exposes:
+- **`switch.xgimi_projector`**: Discrete Turn On / Turn Off control with live `awake` state.
+- **`select.xgimi_input_source`**: Source switcher (`Apps`, `HDMI 1`, `HDMI 2`).
+- **`select.xgimi_picture_mode`**, **`select.xgimi_color_temp`**, **`select.xgimi_game_mode`**: Direct picture adjustment dropdowns.
+- **`button.xgimi_autofocus`**, **`button.xgimi_lamp_off`**, **`button.xgimi_lamp_on`**, **`button.xgimi_restart`**: Quick action buttons.
 
 ## Notes / known quirks
 
