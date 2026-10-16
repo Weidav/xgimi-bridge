@@ -35,6 +35,12 @@ public class HttpServer extends NanoHTTPD {
     }
 
     @Override
+    public void stop() {
+        super.stop();
+        adb.close();
+    }
+
+    @Override
     public Response serve(IHTTPSession session) {
         String uri = session.getUri();
         Log.i(TAG, session.getMethod() + " " + uri);

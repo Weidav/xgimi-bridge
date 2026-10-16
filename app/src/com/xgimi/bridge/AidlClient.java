@@ -63,7 +63,7 @@ public class AidlClient {
     private final AtomicReference<IBinder> videoBinder = new AtomicReference<>();
     private final AtomicReference<IBinder> commonBinder = new AtomicReference<>();
     private final AtomicReference<IBinder> projectorBinder = new AtomicReference<>();
-    private boolean connected = false;
+    private volatile boolean connected = false;
 
     public AidlClient(Context ctx) { this.ctx = ctx; }
 
@@ -71,6 +71,17 @@ public class AidlClient {
         Intent i = new Intent(BIND_ACTION).setPackage(BIND_PKG);
         boolean ok = ctx.bindService(i, conn, Context.BIND_AUTO_CREATE);
         Log.i(TAG, "AidlClient.bindService -> " + ok);
+    }
+
+    public void disconnect() {
+        try {
+            ctx.unbindService(conn);
+        } catch (Throwable ignored) {}
+        connected = false;
+        svcBinder.set(null);
+        videoBinder.set(null);
+        commonBinder.set(null);
+        projectorBinder.set(null);
     }
 
     public boolean isReady() { return connected && videoBinder.get() != null; }

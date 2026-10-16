@@ -276,6 +276,12 @@ public class LocalAdbClient {
         throw new Exception("dispatcher response timeout");
     }
 
+    public void close() {
+        synchronized (dispatcherLock) {
+            closeDispatcher();
+        }
+    }
+
     private void closeDispatcher() {
         if (dispSock != null) try { dispSock.close(); } catch (Exception ignored) {}
         dispSock = null;

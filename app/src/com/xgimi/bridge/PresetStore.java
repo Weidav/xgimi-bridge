@@ -145,7 +145,7 @@ public class PresetStore {
             return new JSONArray(out.toString("UTF-8"));
         } catch (Exception e) { return new JSONArray(); }
     }
-    public JSONObject create(JSONObject body) throws IOException, JSONException {
+    public synchronized JSONObject create(JSONObject body) throws IOException, JSONException {
         String name = body.optString("name", "Untitled").trim();
         if (name.isEmpty()) name = "Untitled";
         JSONObject values = sanitizeValues(body.optJSONObject("values"));
@@ -166,7 +166,7 @@ public class PresetStore {
         return p;
     }
 
-    public JSONObject update(String id, JSONObject body) throws IOException, JSONException {
+    public synchronized JSONObject update(String id, JSONObject body) throws IOException, JSONException {
         JSONArray arr = load();
         for (int i = 0; i < arr.length(); i++) {
             JSONObject p = arr.getJSONObject(i);
@@ -182,7 +182,7 @@ public class PresetStore {
     }
 
     /** Update a preset's values to provided state or current projector state (preserve id+name). */
-    public JSONObject syncFromCurrent(String id, JSONObject body) throws IOException, JSONException {
+    public synchronized JSONObject syncFromCurrent(String id, JSONObject body) throws IOException, JSONException {
         JSONObject values = body != null ? sanitizeValues(body.optJSONObject("values")) : new JSONObject();
         if (values.length() == 0) values = captureCurrent();
         JSONArray arr = load();
@@ -200,7 +200,7 @@ public class PresetStore {
 
     public static class BuiltinException extends RuntimeException { public BuiltinException(String s){super(s);} }
 
-    public boolean delete(String id) throws IOException, JSONException {
+    public synchronized boolean delete(String id) throws IOException, JSONException {
         JSONArray arr = load();
         JSONArray out = new JSONArray();
         boolean removed = false;
@@ -220,8 +220,14 @@ public class PresetStore {
             if (id.equals(p.getString("id"))) {
                 JSONObject v = p.optJSONObject("values");
                 if (v != null) applyValues(v);
+                java.util.Map<String, Object> snap = aidl.snapshot();
+                for (java.util.Map.Entry<String, Object> e : snap.entrySet()) {
+                    if (e.getValue() instanceof java.util.Map) {
+                        e.setValue(new JSONObject((java.util.Map) e.getValue()));
+                    }
+                }
                 JSONObject reply = new JSONObject();
-                reply.put("ok", true).put("id", id).put("after", new JSONObject(aidl.snapshot()));
+                reply.put("ok", true).put("id", id).put("after", new JSONObject(snap));
                 return reply;
             }
         }

@@ -58,6 +58,7 @@ public class BridgeService extends Service {
         Log.i(TAG, "service onDestroy");
         if (server != null) server.stop();
         if (mdns != null) mdns.stop();
+        if (aidl != null) aidl.disconnect();
         releaseLocks();
         super.onDestroy();
     }
