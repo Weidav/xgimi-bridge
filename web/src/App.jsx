@@ -829,7 +829,18 @@ function Dialog({ spec, onClose }) {
 
 function Slider({ label, accent, value, onChange }) {
   const [local, setLocal] = useState(value);
-  useEffect(() => setLocal(value), [value]);
+  const committedRef = useRef(value);
+  useEffect(() => {
+    setLocal(value);
+    committedRef.current = value;
+  }, [value]);
+
+  function commit(next) {
+    if (next !== committedRef.current) {
+      committedRef.current = next;
+      onChange(next);
+    }
+  }
 
   return (
     <div className="slider">
@@ -840,8 +851,10 @@ function Slider({ label, accent, value, onChange }) {
       <input type="range" min="0" max="100"
         value={local}
         onChange={(e) => setLocal(Number(e.target.value))}
-        onMouseUp={(e) => onChange(Number(e.target.value))}
-        onTouchEnd={(e) => onChange(Number(e.target.value))}
+        onMouseUp={(e) => commit(Number(e.target.value))}
+        onTouchEnd={(e) => commit(Number(e.target.value))}
+        onTouchCancel={(e) => commit(Number(e.target.value))}
+        onKeyUp={(e) => commit(Number(e.target.value))}
         style={{ accentColor: accent }} />
     </div>
   );
