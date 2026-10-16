@@ -198,6 +198,9 @@ public class HttpServer extends NanoHTTPD {
     private Response handlePictureSet(IHTTPSession session, String uri) throws IOException {
         JSONObject body = readJsonBody(session);
         String knob = uri.substring("/api/picture/".length());
+        if (!knob.equals("reset") && (!body.has("value") || body.isNull("value"))) {
+            return json(Response.Status.BAD_REQUEST, errJson("missing value"));
+        }
         try {
             boolean ok;
             int value = body.optInt("value", Integer.MIN_VALUE);
@@ -368,7 +371,7 @@ public class HttpServer extends NanoHTTPD {
             try {
                 String len = session.getHeaders().get("content-length");
                 int n = (len != null) ? Integer.parseInt(len) : 0;
-                if (n > 0) {
+                if (n > 0 && n <= 65536) {
                     byte[] buf = new byte[n];
                     int read = 0;
                     while (read < n) {
