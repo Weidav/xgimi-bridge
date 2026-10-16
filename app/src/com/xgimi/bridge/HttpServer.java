@@ -56,15 +56,23 @@ public class HttpServer extends NanoHTTPD {
             Log.e(TAG, "handler crash", t);
             r = json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
         }
-        r.addHeader("Access-Control-Allow-Origin", "*");
-        r.addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        r.addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
         return r;
     }
 
     private Response handleApi(IHTTPSession session, String uri) throws IOException {
         Method m = session.getMethod();
-        if (m == Method.OPTIONS) return newFixedLengthResponse(Response.Status.NO_CONTENT, "text/plain", "");
+        if (m == Method.POST || m == Method.PUT || m == Method.DELETE) {
+            String origin = session.getHeaders().get("origin");
+            String host = session.getHeaders().get("host");
+            if (origin != null && !origin.isEmpty() && host != null && !host.isEmpty()) {
+                String originHost = origin.replaceFirst("^https?://", "");
+                int slash = originHost.indexOf('/');
+                if (slash >= 0) originHost = originHost.substring(0, slash);
+                if (!originHost.equalsIgnoreCase(host.trim())) {
+                    return json(Response.Status.FORBIDDEN, errJson("cross-origin request forbidden"));
+                }
+            }
+        }
 
         if (uri.equals("/api/state") && m == Method.GET) {
             JSONObject o = new JSONObject();
