@@ -1,6 +1,8 @@
 package com.xgimi.bridge;
 
 import android.os.SystemClock;
+import android.util.Base64;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
 import java.io.BufferedReader;
@@ -11,16 +13,18 @@ import java.lang.reflect.Method;
  * Long-lived input-event injector. Started once per bridge lifetime by spawning
  * {@code app_process} over an ADB shell stream (so it runs as shell uid, which holds the
  * signature-protected INJECT_EVENTS permission). After ~200 ms of JVM startup it sits in a
- * read-line loop on stdin and dispatches a KEY_DOWN/KEY_UP pair per integer keycode it reads.
+ * read-line loop on stdin and dispatches a KEY_DOWN/KEY_UP pair per integer keycode it reads,
+ * or a sequence of key events for Base64-encoded text.
  *
  * Replaces {@code input keyevent N} which would re-pay the same JVM cold start every call.
  *
  * Invocation pattern (from the bridge over ADB shell):
- *   CLASSPATH=&lt;bridge.apk&gt; exec app_process / com.xgimi.bridge.KeyDispatcher
+ *   CLASSPATH=<bridge.apk> exec app_process / com.xgimi.bridge.KeyDispatcher
  *
  * Wire format:
- *   stdin:  "&lt;keycode&gt;\n"   (e.g. "20\n" for DPAD_DOWN)
- *   stdout: "OK &lt;keycode&gt;\n" on success, "ERR &lt;message&gt;\n" on failure
+ *   stdin:  "<keycode>\n"       (e.g. "20\n" for DPAD_DOWN)
+ *           "TEXT <base64>\n"   (e.g. "TEXT SGVsbG8=\n")
+ *   stdout: "OK <keycode>\n" or "OK TEXT\n" on success, "ERR <message>\n" on failure
  */
 public class KeyDispatcher {
     public static void main(String[] args) {
@@ -45,6 +49,22 @@ public class KeyDispatcher {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 try {
+                    if (line.startsWith("TEXT ")) {
+                        byte[] raw = Base64.decode(line.substring(5).trim(), Base64.DEFAULT);
+                        String text = new String(raw, "UTF-8");
+                        KeyCharacterMap kcm = KeyCharacterMap.load(KeyCharacterMapSource());
+                        KeyEvent[] events = kcm.getEvents(text.toCharArray());
+                        if (events == null) {
+                            System.out.println("ERR UnsupportedCharacters: cannot map text to key events");
+                        } else {
+                            for (KeyEvent ev : events) {
+                                injectInputEvent.invoke(im, ev, INJECT_MODE_ASYNC);
+                            }
+                            System.out.println("OK TEXT");
+                        }
+                        System.out.flush();
+                        continue;
+                    }
                     int code = Integer.parseInt(line);
                     long now = SystemClock.uptimeMillis();
                     KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0,

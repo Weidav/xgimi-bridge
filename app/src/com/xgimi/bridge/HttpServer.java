@@ -130,7 +130,7 @@ public class HttpServer extends NanoHTTPD {
         if (m == Method.POST && uri.startsWith("/api/input")) return handleInputSwitch(session, uri);
         if (uri.startsWith("/api/presets")) return handlePresets(session, uri);
         if (m == Method.POST && uri.startsWith("/api/power/")) return handlePower(uri);
-        if (uri.startsWith("/api/adb/")) return handleAdb(uri, m);
+        if (uri.startsWith("/api/adb/")) return handleAdb(session, uri, m);
 
         return json(Response.Status.NOT_FOUND, errJson("no such endpoint"));
     }
@@ -144,8 +144,9 @@ public class HttpServer extends NanoHTTPD {
      *                                     Allow + Always with the physical remote, once.
      *   POST /api/adb/keyevent/<n>      — runs `input keyevent N` as shell uid (works because
      *                                     shell has INJECT_EVENTS).
+     *   POST /api/adb/text              — sends arbitrary text to the TV via KeyDispatcher.
      */
-    private Response handleAdb(String uri, Method m) {
+    private Response handleAdb(IHTTPSession session, String uri, Method m) {
         try {
             if (uri.equals("/api/adb/status") && m == Method.GET) {
                 boolean ok = adb.isAuthorized();
@@ -159,6 +160,15 @@ public class HttpServer extends NanoHTTPD {
                 int code = Integer.parseInt(uri.substring("/api/adb/keyevent/".length()));
                 String out = adb.injectKey(code);
                 return json(Response.Status.OK, "{\"ok\":true,\"key\":" + code + ",\"out\":" + jsonString(out) + "}");
+            }
+            if (uri.equals("/api/adb/text") && m == Method.POST) {
+                JSONObject body = readJsonBody(session);
+                String text = body.optString("text", "");
+                if (text.isEmpty()) {
+                    return json(Response.Status.BAD_REQUEST, errJson("missing text"));
+                }
+                String out = adb.injectText(text);
+                return json(Response.Status.OK, "{\"ok\":true,\"out\":" + jsonString(out) + "}");
             }
         } catch (Exception e) {
             Log.e(TAG, "adb endpoint " + uri + " failed", e);

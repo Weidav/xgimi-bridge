@@ -460,6 +460,19 @@ export default function App() {
     sendKeyDispatch(keyCode);
   }
 
+  async function sendText() {
+    const text = await askPrompt({ title: "Send text", placeholder: "Type text to enter on TV…", okLabel: "Send" });
+    if (!text) return;
+    setBusy(true);
+    try {
+      await liveCall("/api/adb/text", { method: "POST", body: { text } }, 5000);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const onStorage = picture?.currentInputSource === "E_INPUT_SOURCE_STORAGE";
 
   return (
@@ -495,7 +508,7 @@ export default function App() {
       )}
 
       {adbAuthorized ? (
-        <RemoteCard sendKey={sendKey} />
+        <RemoteCard sendKey={sendKey} onSendText={sendText} />
       ) : (
         <section className="card adb-card">
           <h2>Remote needs access</h2>
@@ -764,16 +777,19 @@ function HoldButton({ keyCode, sendKey, repeat = true, className = "rc-btn", chi
   );
 }
 
-function RemoteCard({ sendKey }) {
+function RemoteCard({ sendKey, onSendText }) {
   return (
     <section className="card rc-card">
       <h2>Remote</h2>
       <div className="rc-shell">
-        {/* Top row: settings + assistant + autofocus */}
+        {/* Top row: settings + assistant + autofocus + keyboard */}
         <div className="rc-top-row">
           <HoldButton keyCode={KEY.SETTINGS} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Settings">
             <SettingsIcon />
           </HoldButton>
+          <button className="rc-btn rc-btn-small" onClick={onSendText} aria-label="Send text">
+            <KeyboardIcon />
+          </button>
           <HoldButton keyCode={KEY.ASSIST} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small rc-btn-assist" ariaLabel="Assistant">
             <AssistantDots />
           </HoldButton>
@@ -806,6 +822,21 @@ function RemoteCard({ sendKey }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function KeyboardIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="6" y1="9" x2="6" y2="9" />
+      <line x1="10" y1="9" x2="10" y2="9" />
+      <line x1="14" y1="9" x2="14" y2="9" />
+      <line x1="18" y1="9" x2="18" y2="9" />
+      <line x1="6" y1="13" x2="6" y2="13" />
+      <line x1="18" y1="13" x2="18" y2="13" />
+      <line x1="8" y1="15" x2="16" y2="15" />
+    </svg>
   );
 }
 

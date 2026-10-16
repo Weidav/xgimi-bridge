@@ -102,6 +102,18 @@ public class LocalAdbClient {
         }
     }
 
+    public String injectText(String text) throws Exception {
+        synchronized (dispatcherLock) {
+            try {
+                return injectTextOnce(text);
+            } catch (Exception first) {
+                Log.w(TAG, "Dispatcher fault (" + first.getMessage() + "), respawning");
+                closeDispatcher();
+                return injectTextOnce(text);
+            }
+        }
+    }
+
     /** Triggers the on-screen Allow prompt if needed; otherwise just verifies auth. */
     public String authorize() throws Exception {
         synchronized (keyLock) { ensureKey(); }
@@ -157,6 +169,22 @@ public class LocalAdbClient {
         // unread "OK N" lines still buffered in their stdout pipe — skip until we see
         // the response that actually matches what we just sent.
         String expected = "OK " + keyCode;
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (System.currentTimeMillis() < deadline) {
+            String line = readDispatcherLine();
+            if (expected.equals(line)) return line;
+            if (line.startsWith("ERR ")) throw new Exception("dispatcher error: " + line);
+            Log.w(TAG, "Discarding stale dispatcher response '" + line + "' (expected '" + expected + "')");
+        }
+        throw new Exception("dispatcher response timeout (no matching '" + expected + "')");
+    }
+
+    private String injectTextOnce(String text) throws Exception {
+        ensureDispatcher();
+        String b64 = Base64.encodeToString(text.getBytes("UTF-8"), Base64.NO_WRAP);
+        byte[] payload = ("TEXT " + b64 + "\n").getBytes("UTF-8");
+        writePacket(dispOut, A_WRTE, dispLocalId, dispRemoteId, payload);
+        String expected = "OK TEXT";
         long deadline = System.currentTimeMillis() + 5_000;
         while (System.currentTimeMillis() < deadline) {
             String line = readDispatcherLine();
