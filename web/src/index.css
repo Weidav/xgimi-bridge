@@ -61,24 +61,6 @@ body {
   margin: 0 0 12px;
 }
 
-.card-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.card-head h2 { margin: 0; }
-.card-head-meta {
-  font-size: 13px;
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .muted { color: var(--muted); margin: 0; }
 .state, .err {
   margin: 0;
@@ -88,15 +70,6 @@ body {
   word-break: break-word;
 }
 .err { color: var(--danger); }
-
-ul.kv { list-style: none; padding: 0; margin: 0; }
-ul.kv li {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 0; border-bottom: 1px solid var(--border);
-}
-ul.kv li:last-child { border-bottom: none; }
-ul.kv li span { color: var(--muted); }
-ul.kv li b { font-weight: 500; font-variant-numeric: tabular-nums; }
 
 .slider { padding: 8px 0; }
 .slider-row { display: flex; justify-content: space-between; padding-bottom: 6px; }
@@ -121,16 +94,14 @@ ul.kv li b { font-weight: 500; font-variant-numeric: tabular-nums; }
 .adb-btn { background: var(--accent); color: #fff; border: none; }
 .adb-btn:hover:not(:disabled) { background: #066ed1; }
 
-.btn, .btn-pill {
+.btn {
   font: inherit; cursor: pointer;
   background: var(--accent); color: white;
   border: none; border-radius: 12px; padding: 12px 16px;
   font-weight: 600;
 }
-.btn:disabled, .btn-pill:disabled { opacity: 0.5; }
+.btn:disabled { opacity: 0.5; }
 .btn { width: 100%; margin-top: 12px; background: rgba(255,255,255,0.08); }
-.btn-pill { font-size: 14px; padding: 10px 14px; background: rgba(255,255,255,0.08); }
-.row { display: flex; gap: 8px; flex-wrap: wrap; }
 
 ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .preset { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -144,7 +115,6 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .preset-name:disabled { opacity: 0.5; }
 .preset-name .dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); }
 .preset-name span:nth-child(2) { flex: 1; font-weight: 500; }
-.preset-sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .preset-actions { display: flex; gap: 4px; }
 .icon-btn {
   background: rgba(255,255,255,0.06); color: var(--fg);
@@ -154,39 +124,9 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .icon-btn:disabled { opacity: 0.4; }
 .icon-danger { color: var(--danger); }
 
-.per-source { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip {
-  background: rgba(255,255,255,0.06); color: var(--muted);
-  padding: 3px 8px; border-radius: 8px; font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.chip.on { background: rgba(48, 209, 88, 0.18); color: #30d158; }
-
 .badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #8e8e93; }
 .badge .pin { display: block; }
 
-.collapsible { padding: 0; }
-.collapsible > summary {
-  list-style: none; cursor: pointer;
-  padding: 16px;
-  display: flex; align-items: center; justify-content: space-between;
-  user-select: none;
-}
-.collapsible > summary::-webkit-details-marker { display: none; }
-.collapsible > summary > h2 { margin: 0; }
-.collapsible > summary::after {
-  content: "›";
-  color: var(--muted);
-  font-size: 22px;
-  transform: rotate(90deg);
-  transition: transform 0.18s ease;
-  margin-left: 8px;
-}
-.collapsible[open] > summary::after { transform: rotate(-90deg); }
-.collapsible[open] { padding-bottom: 16px; }
-.collapsible > *:not(summary) { margin-left: 16px; margin-right: 16px; }
-
-.input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .input-btn {
   background: rgba(255,255,255,0.06); color: var(--fg); border: 0;
   border-radius: 12px; padding: 14px 12px; font: inherit;
@@ -198,7 +138,6 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .input-btn span { font-weight: 600; font-size: 16px; }
 .input-btn small { color: var(--muted); font-size: 12px; }
 
-.state-row { margin-bottom: 12px; }
 .input-rows { display: flex; flex-direction: column; gap: 8px; }
 .input-btn-row { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; padding: 16px; }
 .input-btn-row span { font-size: 17px; }
@@ -323,29 +262,6 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 }
 .modal-btn-danger:hover { background: #d63b32; border-color: #d63b32; }
 
-.power-row { display: flex; flex-direction: column; gap: 8px; }
-.power-btn {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--fg);
-  border: 0;
-  border-radius: 12px;
-  padding: 14px 16px;
-  font: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.power-btn:disabled { opacity: 0.4; }
-.power-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
-.power-btn:active:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
-.power-btn span { font-weight: 600; font-size: 16px; }
-.power-btn small { color: var(--muted); font-size: 12px; }
-.power-btn-danger { color: var(--danger); }
-.power-btn-danger small { color: rgba(255, 69, 58, 0.6); }
-
 /* Header layout with the right-side action buttons (SRC + PWR, like classical remotes). */
 .hdr-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .hdr-actions { display: flex; gap: 8px; flex: 0 0 auto; margin-top: 4px; }
@@ -417,30 +333,7 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .power-item-label { font-size: 15px; font-weight: 500; }
 .power-item-sub { font-size: 12px; color: var(--muted); }
 
-/* Close-X in top-right of modals/sheets. */
-.modal, .power-sheet { position: relative; }
-.modal-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.modal-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--fg);
-  border-color: rgba(255, 255, 255, 0.16);
-}
+.modal { position: relative; }
 
 /* Virtual remote — vertical layout matching the Xgimi physical remote, dark + matte. */
 .rc-card { padding-bottom: 22px; }

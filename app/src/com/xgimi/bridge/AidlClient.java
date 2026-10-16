@@ -49,7 +49,6 @@ public class AidlClient {
     static final int TX_GET_WB_GREEN_GAIN = 0x9;
     static final int TX_GET_WB_BLUE_GAIN = 0xa;
     static final int TX_RESET_PICTURE_MODE = 0x13;
-    static final int TX_SWITCH_TO_SIGNAL_SOURCE = 0x20;
     static final int TX_SET_GAME_MODE_OPTION = 0x24;
     static final int TX_GET_GAME_MODE_OPTION = 0x25;
     static final int TX_SET_GAME_MODE_OPTION_FOR_SOURCE = 0x26;
@@ -242,18 +241,6 @@ public class AidlClient {
         } finally { data.recycle(); reply.recycle(); }
     }
 
-    public void switchToSignalSource(String s1, String s2) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            data.writeString(s1);
-            data.writeString(s2);
-            b.transact(TX_SWITCH_TO_SIGNAL_SOURCE, data, reply, 0);
-            reply.readException();
-        } finally { data.recycle(); reply.recycle(); }
-    }
 
     /** Snapshot of all interesting picture state. */
     public Map<String, Object> snapshot() {

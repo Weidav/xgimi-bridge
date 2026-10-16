@@ -39,8 +39,8 @@ import javax.crypto.Cipher;
  *      paid once, then each keypress is just a stdin write + stdout read on an open stream:
  *      &lt;10 ms per key.
  *
- *   2. One-shot shell (used by runShell / authorize) — opens a fresh ADB connection, does the
- *      handshake, runs the command, closes. Slow (~300 ms) but rarely on the hot path.
+ *   2. One-shot connection (used by authorize / isAuthorized) — opens a fresh ADB connection,
+ *      does the handshake, closes.
  *
  * Wire format reference: AOSP {@code system/core/adb/protocol.txt}.
  */
@@ -99,22 +99,6 @@ public class LocalAdbClient {
                 closeDispatcher();
                 return injectKeyOnce(keyCode);
             }
-        }
-    }
-
-    /** One-shot arbitrary shell command, on a fresh ADB connection. */
-    public String runShell(String cmd) throws Exception {
-        synchronized (keyLock) { ensureKey(); }
-        Socket s = new Socket();
-        s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
-        s.setSoTimeout(30000);
-        try {
-            DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
-            OutputStream out = s.getOutputStream();
-            handshake(in, out);
-            return openOneShotShell(in, out, cmd);
-        } finally {
-            try { s.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -394,30 +378,6 @@ public class LocalAdbClient {
         if (p3.cmd != A_CNXN) {
             throw new Exception("Allow prompt rejected or timed out (cmd=0x" + Integer.toHexString(p3.cmd) + ")");
         }
-    }
-
-    private String openOneShotShell(DataInputStream in, OutputStream out, String cmd) throws Exception {
-        int localId = 1;
-        byte[] dest = ("shell:" + cmd + "\0").getBytes("UTF-8");
-        writePacket(out, A_OPEN, localId, 0, dest);
-
-        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
-        int remoteId = -1;
-        while (true) {
-            Packet p = readPacket(in);
-            if (p.cmd == A_OKAY) {
-                remoteId = p.arg0;
-            } else if (p.cmd == A_WRTE) {
-                stdout.write(p.payload);
-                writePacket(out, A_OKAY, localId, p.arg0, null);
-            } else if (p.cmd == A_CLSE) {
-                if (remoteId >= 0) writePacket(out, A_CLSE, localId, p.arg0, null);
-                break;
-            } else {
-                throw new Exception("unexpected stream packet: 0x" + Integer.toHexString(p.cmd));
-            }
-        }
-        return stdout.toString("UTF-8");
     }
 
     // ---- Crypto helpers ----

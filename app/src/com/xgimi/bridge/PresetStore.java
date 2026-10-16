@@ -258,18 +258,6 @@ public class PresetStore {
         try { Thread.sleep(150); } catch (InterruptedException ie) {}
     }
 
-    private void writePictureItemAndVerify(String label, int item, int target) throws RemoteException {
-        for (int attempt = 0; attempt < 4; attempt++) {
-            aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, item, target);
-            try { Thread.sleep(60); } catch (InterruptedException ie) {}
-            int got;
-            try { got = aidl.getIntWithIntArg(AidlClient.TX_GET_PICTURE_ITEM, item); } catch (Throwable t) { got = -9999; }
-            if (got == target) { Log.i(TAG, label + "=" + target + " ok (attempt " + (attempt + 1) + ")"); return; }
-            Log.w(TAG, label + ": wrote " + target + " readback=" + got + " (retry " + (attempt + 1) + ")");
-        }
-        Log.e(TAG, label + ": failed to converge to " + target);
-    }
-
     private void writeAndVerify(String label, int setCode, int getCode, int target) throws RemoteException {
         for (int attempt = 0; attempt < 4; attempt++) {
             aidl.setInt(setCode, target);
