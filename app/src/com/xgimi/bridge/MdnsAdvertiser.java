@@ -150,17 +150,25 @@ public class MdnsAdvertiser {
 
     private InetAddress pickUsableIpv4() throws Exception {
         Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+        if (ifaces == null) return null;
+        InetAddress fallback = null;
         while (ifaces.hasMoreElements()) {
             NetworkInterface ni = ifaces.nextElement();
-            if (ni.isLoopback() || !ni.isUp()) continue;
+            if (ni.isLoopback() || !ni.isUp() || !ni.supportsMulticast()
+                    || ni.isVirtual() || ni.isPointToPoint()) continue;
+            String name = ni.getName() != null ? ni.getName().toLowerCase() : "";
+            if (name.startsWith("p2p") || name.startsWith("tun") || name.startsWith("tap")
+                    || name.startsWith("ppp") || name.startsWith("rmnet")
+                    || name.startsWith("dummy") || name.startsWith("ap")) continue;
             Enumeration<InetAddress> addrs = ni.getInetAddresses();
             while (addrs.hasMoreElements()) {
                 InetAddress a = addrs.nextElement();
                 if (!(a instanceof Inet4Address)) continue;
                 if (a.isLoopbackAddress() || a.isLinkLocalAddress() || a.isAnyLocalAddress()) continue;
-                return a;
+                if (name.startsWith("wlan") || name.startsWith("eth")) return a;
+                if (fallback == null) fallback = a;
             }
         }
-        return null;
+        return fallback;
     }
 }
