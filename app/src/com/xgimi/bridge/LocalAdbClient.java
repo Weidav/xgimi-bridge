@@ -188,50 +188,57 @@ public class LocalAdbClient {
 
         ensureKey();
         Socket s = new Socket();
-        s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
-        s.setSoTimeout(30000);
-        DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
-        OutputStream out = s.getOutputStream();
-        handshake(in, out);
+        try {
+            s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
+            s.setSoTimeout(30000);
+            DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
+            OutputStream out = s.getOutputStream();
+            handshake(in, out);
+            s.setSoTimeout(10_000);
 
-        // Run our KeyDispatcher class via app_process with this APK on the classpath.
-        String apkPath = ctx.getPackageCodePath();
-        String cmd = "CLASSPATH=" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
+            // Run our KeyDispatcher class via app_process with this APK on the classpath.
+            String apkPath = ctx.getPackageCodePath();
+            String cmd = "CLASSPATH=" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
 
-        int localId = 1;
-        byte[] dest = ("shell:" + cmd + "\0").getBytes("UTF-8");
-        writePacket(out, A_OPEN, localId, 0, dest);
+            int localId = 1;
+            byte[] dest = ("shell:" + cmd + "\0").getBytes("UTF-8");
+            writePacket(out, A_OPEN, localId, 0, dest);
 
-        StringBuilder banner = new StringBuilder();
-        long deadline = System.currentTimeMillis() + 10_000;
-        int remoteId = -1;
-        while (System.currentTimeMillis() < deadline) {
-            Packet p = readPacket(in);
-            if (p.cmd == A_OKAY && p.arg1 == localId) {
-                remoteId = p.arg0;
-            } else if (p.cmd == A_WRTE && p.arg1 == localId) {
-                banner.append(new String(p.payload, "UTF-8"));
-                writePacket(out, A_OKAY, localId, p.arg0, null);
-                if (banner.indexOf("READY") >= 0 && remoteId > 0) {
-                    dispSock = s;
-                    dispIn = in;
-                    dispOut = out;
-                    dispLocalId = localId;
-                    dispRemoteId = remoteId;
-                    Log.i(TAG, "LocalAdbClient: KeyDispatcher READY (apk=" + apkPath + ")");
-                    return;
-                }
-                if (banner.indexOf("FATAL") >= 0) {
+            StringBuilder banner = new StringBuilder();
+            long deadline = System.currentTimeMillis() + 10_000;
+            int remoteId = -1;
+            while (System.currentTimeMillis() < deadline) {
+                Packet p = readPacket(in);
+                if (p.cmd == A_OKAY && p.arg1 == localId) {
+                    remoteId = p.arg0;
+                } else if (p.cmd == A_WRTE && p.arg1 == localId) {
+                    banner.append(new String(p.payload, "UTF-8"));
+                    writePacket(out, A_OKAY, localId, p.arg0, null);
+                    if (banner.indexOf("READY") >= 0 && remoteId > 0) {
+                        s.setSoTimeout(5_000);
+                        dispSock = s;
+                        dispIn = in;
+                        dispOut = out;
+                        dispLocalId = localId;
+                        dispRemoteId = remoteId;
+                        Log.i(TAG, "LocalAdbClient: KeyDispatcher READY (apk=" + apkPath + ")");
+                        return;
+                    }
+                    if (banner.indexOf("FATAL") >= 0) {
+                        try { s.close(); } catch (Exception ignored) {}
+                        throw new Exception("dispatcher startup failed: " + banner);
+                    }
+                } else if (p.cmd == A_CLSE) {
                     try { s.close(); } catch (Exception ignored) {}
-                    throw new Exception("dispatcher startup failed: " + banner);
+                    throw new Exception("dispatcher stream closed before READY: " + banner);
                 }
-            } else if (p.cmd == A_CLSE) {
-                try { s.close(); } catch (Exception ignored) {}
-                throw new Exception("dispatcher stream closed before READY: " + banner);
             }
+            try { s.close(); } catch (Exception ignored) {}
+            throw new Exception("dispatcher startup timeout: " + banner);
+        } catch (Exception e) {
+            try { s.close(); } catch (Exception ignored) {}
+            throw e;
         }
-        try { s.close(); } catch (Exception ignored) {}
-        throw new Exception("dispatcher startup timeout: " + banner);
     }
 
     private String readDispatcherLine() throws Exception {
@@ -337,6 +344,9 @@ public class LocalAdbClient {
         int len = b.getInt();
         b.getInt(); // crc
         b.getInt(); // magic
+        if (len < 0 || len > MAX_PAYLOAD) {
+            throw new Exception("invalid ADB packet length: " + len);
+        }
         p.payload = new byte[len];
         if (len > 0) in.readFully(p.payload);
         return p;
