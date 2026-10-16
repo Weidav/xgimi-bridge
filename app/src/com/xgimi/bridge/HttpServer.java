@@ -335,7 +335,8 @@ public class HttpServer extends NanoHTTPD {
                 }
             }
             if (sub.equals("sync") && m == Method.POST) {
-                JSONObject p = presets.syncFromCurrent(id);
+                JSONObject body = readJsonBody(session);
+                JSONObject p = presets.syncFromCurrent(id, body);
                 if (p == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
                 return json(Response.Status.OK, p.toString());
             }

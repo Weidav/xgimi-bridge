@@ -344,7 +344,7 @@ export default function App() {
     if (!name || !name.trim()) return;
     setBusy(true);
     try {
-      await api("/api/presets", { method: "POST", body: { name: name.trim() } });
+      await api("/api/presets", { method: "POST", body: { name: name.trim(), values: picture } });
       setPresets(await api("/api/presets"));
     } catch (e) { setErr(String(e)); }
     finally { setBusy(false); }
@@ -364,7 +364,7 @@ export default function App() {
   async function syncPreset(id) {
     setBusy(true);
     try {
-      await api(`/api/presets/${id}/sync`, { method: "POST" });
+      await api(`/api/presets/${id}/sync`, { method: "POST", body: { values: picture } });
       setPresets(await api("/api/presets"));
     } catch (e) { setErr(String(e)); }
     finally { setBusy(false); }

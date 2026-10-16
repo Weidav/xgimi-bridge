@@ -181,13 +181,15 @@ public class PresetStore {
         return null;
     }
 
-    /** Update a presets values to current projector state (preserve id+name). */
-    public JSONObject syncFromCurrent(String id) throws IOException, JSONException {
+    /** Update a preset's values to provided state or current projector state (preserve id+name). */
+    public JSONObject syncFromCurrent(String id, JSONObject body) throws IOException, JSONException {
+        JSONObject values = body != null ? sanitizeValues(body.optJSONObject("values")) : new JSONObject();
+        if (values.length() == 0) values = captureCurrent();
         JSONArray arr = load();
         for (int i = 0; i < arr.length(); i++) {
             JSONObject p = arr.getJSONObject(i);
             if (id.equals(p.getString("id"))) {
-                p.put("values", captureCurrent());
+                p.put("values", values);
                 p.put("updatedAt", System.currentTimeMillis());
                 save(arr);
                 return p;
@@ -305,14 +307,16 @@ public class PresetStore {
         return v;
     }
 
-    /** Strip non-writable keys from any incoming/stored values blob. */
+    /** Strip non-writable or null keys from any incoming/stored values blob. */
     private JSONObject sanitizeValues(JSONObject in) throws JSONException {
         JSONObject v = new JSONObject();
         if (in == null) return v;
         java.util.Iterator<String> it = in.keys();
         while (it.hasNext()) {
             String k = it.next();
-            if (WRITABLE.contains(k)) v.put(k, in.opt(k));
+            if (WRITABLE.contains(k) && !in.isNull(k) && in.opt(k) instanceof Number) {
+                v.put(k, in.optInt(k));
+            }
         }
         return v;
     }
