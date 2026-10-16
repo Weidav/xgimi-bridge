@@ -16,13 +16,18 @@ const PICTURE_ITEMS = [
 
 const PICTURE_MODES = { 1: "Movie", 9: "Football", 6: "Office", 4: "Game", 3: "User" };
 
-function api(path, opts = {}) {
-  return fetch(path, {
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
     method: opts.method || "GET",
     headers: opts.body ? { "Content-Type": "application/json" } : {},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
     signal: opts.signal,
-  }).then((r) => r.json());
+  });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) {
+    throw new Error((data && data.error) || `HTTP ${r.status}`);
+  }
+  return data;
 }
 
 function labeled(map, n) {
@@ -242,7 +247,9 @@ export default function App() {
         api("/api/inputs").catch(() => []),
         api("/api/adb/status").catch(() => null),
       ]);
-      setState(s); setPresets(ps); setInputs(ins || []);
+      setState(s);
+      if (Array.isArray(ps)) setPresets(ps);
+      setInputs(Array.isArray(ins) ? ins : []);
       if (adb) setAdbAuthorized(!!adb.authorized);
       setConnected(true);
       // Successful round-trip means the bridge is reachable — close the keyevent circuit
