@@ -1,6 +1,11 @@
 package com.xgimi.bridge;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -37,6 +42,7 @@ public class MdnsAdvertiser {
     private final int port;
 
     private WifiManager.MulticastLock multicastLock;
+    private ConnectivityManager.NetworkCallback netCallback;
     private volatile JmDNS jmdns;
     private volatile InetAddress boundAddr;
     private volatile boolean stopped;
@@ -60,16 +66,47 @@ public class MdnsAdvertiser {
         @Override public void run() { tearDown(); }
     };
 
+    private void triggerWatchdogSoon() {
+        if (!stopped && worker != null) {
+            worker.removeCallbacks(watchdogTask);
+            worker.postDelayed(watchdogTask, 500L);
+        }
+    }
+
     public void start() {
         stopped = false;
         workerThread = new HandlerThread("mdns-worker");
         workerThread.start();
         worker = new Handler(workerThread.getLooper());
         worker.post(registerTask);
+        try {
+            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                NetworkRequest req = new NetworkRequest.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+                        .build();
+                netCallback = new ConnectivityManager.NetworkCallback() {
+                    @Override public void onAvailable(Network net) { triggerWatchdogSoon(); }
+                    @Override public void onLost(Network net) { triggerWatchdogSoon(); }
+                    @Override public void onLinkPropertiesChanged(Network net, LinkProperties lp) { triggerWatchdogSoon(); }
+                };
+                cm.registerNetworkCallback(req, netCallback);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "failed to register network callback", t);
+        }
     }
 
     public void stop() {
         stopped = true;
+        if (netCallback != null) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) cm.unregisterNetworkCallback(netCallback);
+            } catch (Throwable ignored) {}
+            netCallback = null;
+        }
         if (worker != null) worker.post(tearDownTask);
         if (workerThread != null) workerThread.quitSafely();
     }
@@ -117,6 +154,7 @@ public class MdnsAdvertiser {
         } catch (Exception e) {
             Log.w(TAG, "mDNS watchdog error", e);
         }
+        worker.removeCallbacks(watchdogTask);
         worker.postDelayed(watchdogTask, WATCHDOG_INTERVAL_MS);
     }
 
