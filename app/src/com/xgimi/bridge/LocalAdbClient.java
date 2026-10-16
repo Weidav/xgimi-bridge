@@ -177,7 +177,7 @@ public class LocalAdbClient {
         while (System.currentTimeMillis() < deadline) {
             String line = readDispatcherLine();
             if (expected.equals(line)) return line;
-            if (line.startsWith("ERR ")) return line;
+            if (line.startsWith("ERR ")) throw new Exception("dispatcher error: " + line);
             Log.w(TAG, "Discarding stale dispatcher response '" + line + "' (expected '" + expected + "')");
         }
         throw new Exception("dispatcher response timeout (no matching '" + expected + "')");
