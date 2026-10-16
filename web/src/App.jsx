@@ -16,6 +16,26 @@ const PICTURE_ITEMS = [
 
 const PICTURE_MODES = { 1: "Movie", 9: "Football", 6: "Office", 4: "Game", 3: "User" };
 
+const PICTURE_MODE_OPTIONS = [
+  { value: 1, label: "Movie" },
+  { value: 9, label: "Football" },
+  { value: 6, label: "Office" },
+  { value: 4, label: "Game" },
+  { value: 3, label: "User" },
+];
+const COLOR_TEMP_OPTIONS = [
+  { value: 0, label: "System" },
+  { value: 1, label: "Warm" },
+  { value: 2, label: "Standard" },
+  { value: 3, label: "Cold" },
+  { value: 4, label: "User" },
+];
+const GAME_MODE_OPTIONS = [
+  { value: 0, label: "Off" },
+  { value: 1, label: "Standard" },
+  { value: 2, label: "Boost" },
+];
+
 async function api(path, opts = {}) {
   const r = await fetch(path, {
     method: opts.method || "GET",
@@ -536,22 +556,39 @@ export default function App() {
           </summary>
           {!picture && <p className="muted">loading…</p>}
           {picture && onStorage && <p className="muted">Not applicable on Apps. Switch to HDMI to adjust.</p>}
-          {picture && !onStorage && KNOBS.map((k) => (
-            <Slider key={k.key} label={k.label} accent={k.accent}
-              value={picture[k.key] ?? 50}
-              onChange={(v) => setKnob(k.ep, v)} />
-          ))}
+          {picture && !onStorage && (
+            <>
+              <OptionRow label="Color temp" options={COLOR_TEMP_OPTIONS}
+                value={picture.colorTemp} disabled={busy}
+                onChange={(v) => setKnob("color-temp", v)} />
+              {KNOBS.map((k) => (
+                <Slider key={k.key} label={k.label} accent={k.accent}
+                  value={picture[k.key] ?? 50}
+                  onChange={(v) => setKnob(k.ep, v)} />
+              ))}
+            </>
+          )}
         </details>
 
         <details className="sub-card">
           <summary><h3>Picture</h3></summary>
           {!picture && <p className="muted">loading…</p>}
           {picture && onStorage && <p className="muted">Not applicable on Apps. Switch to HDMI to adjust.</p>}
-          {picture && !onStorage && PICTURE_ITEMS.map((k) => (
-            <Slider key={k.key} label={k.label} accent={k.accent}
-              value={picture[k.key] ?? 50}
-              onChange={(v) => setKnob(k.ep, v)} />
-          ))}
+          {picture && !onStorage && (
+            <>
+              <OptionRow label="Mode" options={PICTURE_MODE_OPTIONS}
+                value={picture.pictureMode} disabled={busy}
+                onChange={(v) => setKnob("picture-mode", v)} />
+              <OptionRow label="Game mode" options={GAME_MODE_OPTIONS}
+                value={picture.gameMode} disabled={busy}
+                onChange={(v) => setKnob("game-mode", v)} />
+              {PICTURE_ITEMS.map((k) => (
+                <Slider key={k.key} label={k.label} accent={k.accent}
+                  value={picture[k.key] ?? 50}
+                  onChange={(v) => setKnob(k.ep, v)} />
+              ))}
+            </>
+          )}
         </details>
       </section>
 
@@ -907,6 +944,29 @@ function Slider({ label, accent, value, onChange }) {
         onTouchCancel={(e) => commit(Number(e.target.value))}
         onKeyUp={(e) => commit(Number(e.target.value))}
         style={{ accentColor: accent }} />
+    </div>
+  );
+}
+
+function OptionRow({ label, options, value, onChange, disabled }) {
+  return (
+    <div className="opt-group">
+      <div className="slider-row">
+        <label>{label}</label>
+      </div>
+      <div className="opt-pills">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            className={"opt-pill" + (value === o.value ? " opt-pill-active" : "")}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

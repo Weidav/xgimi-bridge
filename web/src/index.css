@@ -89,6 +89,27 @@ body {
   margin-top: -12px;
 }
 
+.opt-group { padding: 8px 0; }
+.opt-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt-pill {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.opt-pill:disabled { opacity: 0.4; cursor: not-allowed; }
+.opt-pill-active {
+  background: rgba(10, 132, 255, 0.18);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .adb-card { background: rgba(10,132,255,0.08); border: 1px solid rgba(10,132,255,0.35); }
 .adb-card h2 { font-size: 16px; margin: 0 0 4px 0; }
 .adb-btn { background: var(--accent); color: #fff; border: none; }
