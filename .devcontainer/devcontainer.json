@@ -1,0 +1,28 @@
+{
+    "name": "XGIMI Bridge + Antigravity CLI",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "options": [
+            "--platform=linux/amd64"
+        ]
+    },
+    "runArgs": [
+        "--platform=linux/amd64"
+    ],
+    "mounts": [
+        "source=android-adb-keys,target=/home/vscode/.android,type=volume",
+        "source=antigravity-state,target=/home/vscode/.gemini,type=volume"
+    ],
+    "postCreateCommand": "sudo chown -R vscode:vscode \"$HOME/.android\" \"$HOME/.gemini\" && curl -fsSL https://antigravity.google/cli/install.sh | bash",
+    "remoteEnv": {
+        "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack"
+            ]
+        }
+    },
+    "remoteUser": "vscode"
+}
