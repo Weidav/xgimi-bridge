@@ -641,6 +641,8 @@ function useHoldable(send, opts = {}) {
     }
   }
 
+  useEffect(() => stop, []);
+
   function onPointerDown(e) {
     if (pressedRef.current) return;
     pressedRef.current = true;
@@ -654,15 +656,26 @@ function useHoldable(send, opts = {}) {
       }, initialDelay);
     }
   }
-  // We MUST remove the timer on any pointer leave / cancel / up — otherwise dragging the
-  // finger off the button keeps firing.
+
+  function onPointerMove(e) {
+    if (!pressedRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      stop();
+    }
+  }
+
+  // We MUST remove the timer on any pointer leave / cancel / up / lost capture / drag-out —
+  // otherwise dragging the finger off the button keeps firing.
   return {
     pressed,
     handlers: {
       onPointerDown,
+      onPointerMove,
       onPointerUp: stop,
       onPointerCancel: stop,
       onPointerLeave: stop,
+      onLostPointerCapture: stop,
     },
   };
 }
