@@ -19,7 +19,7 @@
 input_text:
   xgimi_projector_host:
     name: "XGIMI Projector Host"
-    initial: "192.168.3.209"
+    initial: "192.168.3.17"
     icon: mdi:ip-network
 
 # ------------------------------------------------------------------------------
@@ -33,14 +33,14 @@ rest:
       - name: "XGIMI Projector Power"
         unique_id: xgimi_projector_power
         device_class: power
-        state: >-
+        value_template: >-
           {{ value_json.awake if (value_json is defined and 'awake' in value_json) else false }}
 
     sensor:
       - name: "XGIMI Projector Status"
         unique_id: xgimi_projector_status
         icon: mdi:projector
-        state: >-
+        value_template: >-
           {{ 'on' if (value_json.awake | default(false)) else 'standby' }}
         json_attributes:
           - awake
