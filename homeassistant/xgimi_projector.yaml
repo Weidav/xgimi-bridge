@@ -149,10 +149,7 @@ template:
       - name: "XGIMI Input Source"
         unique_id: xgimi_input_source
         icon: mdi:video-input-hdmi
-        options:
-          - "Apps"
-          - "HDMI 1"
-          - "HDMI 2"
+        options: "{{ ['Apps', 'HDMI 1', 'HDMI 2'] }}"
         state: >-
           {% set src = state_attr('sensor.xgimi_projector_status', 'currentInputSource') %}
           {% if src == 'E_INPUT_SOURCE_STORAGE' %}Apps
@@ -175,12 +172,7 @@ template:
       - name: "XGIMI Picture Mode"
         unique_id: xgimi_picture_mode
         icon: mdi:television-guide
-        options:
-          - "Movie"
-          - "Football"
-          - "Office"
-          - "Game"
-          - "User"
+        options: "{{ ['Movie', 'Football', 'Office', 'Game', 'User'] }}"
         state: >-
           {% set mode = state_attr('sensor.xgimi_projector_status', 'pictureMode') %}
           {% set map = {1: 'Movie', 9: 'Football', 6: 'Office', 4: 'Game', 3: 'User'} %}
@@ -199,12 +191,7 @@ template:
       - name: "XGIMI Color Temperature"
         unique_id: xgimi_color_temp
         icon: mdi:palette
-        options:
-          - "System"
-          - "Warm"
-          - "Standard"
-          - "Cold"
-          - "User"
+        options: "{{ ['System', 'Warm', 'Standard', 'Cold', 'User'] }}"
         state: >-
           {% set ct = state_attr('sensor.xgimi_projector_status', 'colorTemp') %}
           {% set map = {0: 'System', 1: 'Warm', 2: 'Standard', 3: 'Cold', 4: 'User'} %}
@@ -223,10 +210,7 @@ template:
       - name: "XGIMI Game Mode"
         unique_id: xgimi_game_mode
         icon: mdi:gamepad-variant
-        options:
-          - "Off"
-          - "Standard"
-          - "Boost"
+        options: "{{ ['Off', 'Standard', 'Boost'] }}"
         state: >-
           {% set gm = state_attr('sensor.xgimi_projector_status', 'gameMode') %}
           {% set map = {0: 'Off', 1: 'Standard', 2: 'Boost'} %}
