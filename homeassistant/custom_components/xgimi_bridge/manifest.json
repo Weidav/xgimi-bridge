@@ -1,0 +1,11 @@
+{
+  "domain": "xgimi_bridge",
+  "name": "XGIMI Bridge",
+  "version": "1.0.0",
+  "documentation": "https://github.com/Weidav/xgimi-bridge",
+  "issue_tracker": "https://github.com/Weidav/xgimi-bridge/issues",
+  "dependencies": [],
+  "codeowners": ["@Weidav"],
+  "config_flow": true,
+  "iot_class": "local_polling"
+}

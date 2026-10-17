@@ -191,17 +191,25 @@ Remote (ADB-loopback / KeyDispatcher):
 
 ## Home Assistant Integration
 
-A ready-to-use package is provided in [`homeassistant/xgimi_projector.yaml`](homeassistant/xgimi_projector.yaml).
+A native custom component is included in [`homeassistant/custom_components/xgimi_bridge/`](homeassistant/custom_components/xgimi_bridge/). It groups all controls into a single **XGIMI Horizon 20** Device in Home Assistant with zero YAML needed.
 
-1. Copy [`homeassistant/xgimi_projector.yaml`](homeassistant/xgimi_projector.yaml) to your Home Assistant `config/packages/` directory.
-2. In the YAML, update the IP address (e.g. `192.168.3.209` or `xgimi.local`) to match your projector.
-3. Reload YAML configuration in Home Assistant.
+### Installation
 
-This exposes:
-- **`switch.xgimi_projector`**: Discrete Turn On / Turn Off control with live `awake` state.
-- **`select.xgimi_input_source`**: Source switcher (`Apps`, `HDMI 1`, `HDMI 2`).
-- **`select.xgimi_picture_mode`**, **`select.xgimi_color_temp`**, **`select.xgimi_game_mode`**: Direct picture adjustment dropdowns.
-- **`button.xgimi_autofocus`**, **`button.xgimi_lamp_off`**, **`button.xgimi_lamp_on`**, **`button.xgimi_restart`**: Quick action buttons.
+1. Copy the `xgimi_bridge` folder into your Home Assistant `custom_components/` directory:
+   ```bash
+   # From your Home Assistant host (e.g. nasPi5 in the HA config directory):
+   curl -fsSL https://github.com/Weidav/xgimi-bridge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=2 xgimi-bridge-main/homeassistant/custom_components/xgimi_bridge
+   ```
+2. Restart Home Assistant.
+3. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
+4. Search for **XGIMI Bridge**, enter your projector IP (e.g. `192.168.3.17`), and click **Submit**.
+
+### Features on the Device Page
+- **Power Switch**: Turn on from WoWLAN deep standby (automatic TCP knock + port 8081 wake) and turn off.
+- **Selects**: Input Source (`Apps`, `HDMI 1`, `HDMI 2`), Presets (dynamically populated from bridge presets), Picture Mode, Color Temperature, Game Mode.
+- **Sliders (`0–100`)**: Brightness, Contrast, Saturation, Sharpness, Hue, and White Balance R/G/B gains.
+- **Buttons**: Auto Focus, Settings Dashboard, Home, Back, Menu, Volume Up/Down/Mute, Lamp Off/On, Restart Projector.
+- **Reconfigurable in GUI**: Click **Configure** on the Device page anytime to change the IP address.
 
 ## Notes / known quirks
 
