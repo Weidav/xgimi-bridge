@@ -84,6 +84,34 @@ public class LocalAdbClient {
     /** Carry-over text from previous packets — adbd may bundle multiple {@code OK N\n} lines
      *  into one A_WRTE; without preserving the tail we'd return a stale OK on the next call. */
     private final StringBuilder dispBuf = new StringBuilder();
+    private final java.util.concurrent.atomic.AtomicBoolean warmingUp = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * Non-blocking warmup: if authorized and not already connected, spawns a daemon thread
+     * to start KeyDispatcher so subsequent key events and the wake listener are ready immediately.
+     */
+    public void warmUpAsync() {
+        if (dispSock != null && !dispSock.isClosed() && dispLocalId > 0) return;
+        if (!warmingUp.compareAndSet(false, true)) return;
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (isAuthorized()) {
+                        synchronized (dispatcherLock) {
+                            try {
+                                ensureDispatcher();
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                } finally {
+                    warmingUp.set(false);
+                }
+            }
+        }, "LocalAdbClient-WarmUp");
+        t.setDaemon(true);
+        t.start();
+    }
 
     public LocalAdbClient(Context ctx) {
         this.ctx = ctx;
@@ -153,6 +181,9 @@ public class LocalAdbClient {
             DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
             OutputStream out = s.getOutputStream();
             handshake(in, out, /*promptOnReject=*/false);
+            if (dispSock == null) {
+                warmUpAsync();
+            }
             return true;
         } catch (Exception e) {
             return false;
@@ -210,7 +241,7 @@ public class LocalAdbClient {
 
             // Run our KeyDispatcher class via app_process with this APK on the classpath.
             String apkPath = ctx.getPackageCodePath();
-            String cmd = "CLASSPATH=" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
+            String cmd = "pkill -f '^app_process.*com.xgimi.bridge.KeyDispatcher' 2>/dev/null; CLASSPATH=" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
 
             int localId = 1;
             byte[] dest = ("shell:" + cmd + "\0").getBytes("UTF-8");

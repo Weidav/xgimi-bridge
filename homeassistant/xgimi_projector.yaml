@@ -61,8 +61,13 @@ rest:
 # 3. REST Commands (API Actions using dynamic host template)
 # ------------------------------------------------------------------------------
 rest_command:
+  xgimi_wake_knock:
+    url: "http://{{ states('input_text.xgimi_projector_host') }}:8010/"
+    method: GET
+    timeout: 2
+
   xgimi_power_on:
-    url: "http://{{ states('input_text.xgimi_projector_host') }}:8080/api/power/on"
+    url: "http://{{ states('input_text.xgimi_projector_host') }}:8081/wake"
     method: POST
     timeout: 5
 
@@ -135,7 +140,14 @@ template:
         icon: mdi:projector
         state: "{{ is_state('binary_sensor.xgimi_projector_power', 'on') }}"
         turn_on:
+          - action: rest_command.xgimi_wake_knock
+            continue_on_error: true
+          - delay: "00:00:01"
           - action: rest_command.xgimi_power_on
+            continue_on_error: true
+          - delay: "00:00:01"
+          - action: rest_command.xgimi_power_on
+          - delay: "00:00:02"
           - action: homeassistant.update_entity
             target:
               entity_id: sensor.xgimi_projector_status

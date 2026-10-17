@@ -32,6 +32,7 @@ public class HttpServer extends NanoHTTPD {
         this.aidl = aidl;
         this.presets = presets;
         this.adb = new LocalAdbClient(ctx);
+        this.adb.warmUpAsync();
     }
 
     @Override

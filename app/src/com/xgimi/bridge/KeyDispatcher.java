@@ -27,6 +27,10 @@ import java.lang.reflect.Method;
  *   stdout: "OK <keycode>\n" or "OK TEXT\n" on success, "ERR <message>\n" on failure
  */
 public class KeyDispatcher {
+    private static final int WAKE_PORT = 8081;
+    private static final Object LOCK = new Object();
+    private static final int INJECT_MODE_ASYNC = 0;
+
     public static void main(String[] args) {
         try {
             // android.hardware.input.InputManagerGlobal + injectInputEvent are hidden APIs.
@@ -38,7 +42,8 @@ public class KeyDispatcher {
                     "injectInputEvent",
                     Class.forName("android.view.InputEvent"),
                     int.class);
-            int INJECT_MODE_ASYNC = 0;
+
+            startWakeServer(im, injectInputEvent);
 
             System.out.println("READY");
             System.out.flush();
@@ -57,8 +62,10 @@ public class KeyDispatcher {
                         if (events == null) {
                             System.out.println("ERR UnsupportedCharacters: cannot map text to key events");
                         } else {
-                            for (KeyEvent ev : events) {
-                                injectInputEvent.invoke(im, ev, INJECT_MODE_ASYNC);
+                            synchronized (LOCK) {
+                                for (KeyEvent ev : events) {
+                                    injectInputEvent.invoke(im, ev, INJECT_MODE_ASYNC);
+                                }
                             }
                             System.out.println("OK TEXT");
                         }
@@ -66,15 +73,7 @@ public class KeyDispatcher {
                         continue;
                     }
                     int code = Integer.parseInt(line);
-                    long now = SystemClock.uptimeMillis();
-                    KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0,
-                            0, KeyCharacterMapSource(), 0, 0,
-                            android.view.InputDevice.SOURCE_KEYBOARD);
-                    KeyEvent up = new KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0,
-                            0, KeyCharacterMapSource(), 0, 0,
-                            android.view.InputDevice.SOURCE_KEYBOARD);
-                    injectInputEvent.invoke(im, down, INJECT_MODE_ASYNC);
-                    injectInputEvent.invoke(im, up, INJECT_MODE_ASYNC);
+                    dispatchKey(im, injectInputEvent, code);
                     System.out.println("OK " + code);
                 } catch (Exception e) {
                     System.out.println("ERR " + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -87,6 +86,58 @@ public class KeyDispatcher {
             System.out.flush();
             System.exit(1);
         }
+    }
+
+    private static void dispatchKey(Object im, Method injectInputEvent, int code) throws Exception {
+        synchronized (LOCK) {
+            long now = SystemClock.uptimeMillis();
+            KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0,
+                    0, KeyCharacterMapSource(), 0, 0,
+                    android.view.InputDevice.SOURCE_KEYBOARD);
+            KeyEvent up = new KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0,
+                    0, KeyCharacterMapSource(), 0, 0,
+                    android.view.InputDevice.SOURCE_KEYBOARD);
+            injectInputEvent.invoke(im, down, INJECT_MODE_ASYNC);
+            injectInputEvent.invoke(im, up, INJECT_MODE_ASYNC);
+        }
+    }
+
+    private static void startWakeServer(final Object im, final Method injectInputEvent) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                java.net.ServerSocket ss = null;
+                try {
+                    ss = new java.net.ServerSocket();
+                    ss.setReuseAddress(true);
+                    ss.bind(new java.net.InetSocketAddress(WAKE_PORT));
+                    while (true) {
+                        final java.net.Socket s = ss.accept();
+                        try {
+                            s.setSoTimeout(2000);
+                            dispatchKey(im, injectInputEvent, KeyEvent.KEYCODE_WAKEUP);
+                            java.io.OutputStream out = s.getOutputStream();
+                            String body = "{\"ok\":true,\"action\":\"wake\"}";
+                            String resp = "HTTP/1.1 200 OK\r\n"
+                                    + "Content-Type: application/json\r\n"
+                                    + "Content-Length: " + body.length() + "\r\n"
+                                    + "Connection: close\r\n\r\n"
+                                    + body;
+                            out.write(resp.getBytes("UTF-8"));
+                            out.flush();
+                        } catch (Throwable ignore) {
+                        } finally {
+                            try { s.close(); } catch (Throwable ignore) {}
+                        }
+                    }
+                } catch (Throwable ignore) {
+                } finally {
+                    if (ss != null) try { ss.close(); } catch (Throwable ignore) {}
+                }
+            }
+        }, "KeyDispatcher-Wake");
+        t.setDaemon(true);
+        t.start();
     }
 
     /** {@link KeyCharacterMap}'s "virtual" device id — use the same value {@code input} does. */
