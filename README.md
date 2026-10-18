@@ -71,15 +71,15 @@ bridge/
 │   ├── build.sh                      Builds bridge.apk via javac + d8 + aapt2 + apksigner
 │   ├── install.sh                    Installs + grants whitelist/appops + kicks the service
 │   ├── debug.keystore                Self-signed key (auto-generated if missing)
-│   ├── lib/                          NanoHTTPD 2.3.1
 │   ├── src/com/xgimi/bridge/
 │   │   ├── AidlClient.java           Raw Binder to com.xgimi.xgimiservice (system uid)
 │   │   ├── BridgeService.java        Foreground service: HTTP lifecycle
 │   │   ├── BridgeJobService.java     Persisted JobScheduler job for boot auto-start
-│   │   ├── HttpServer.java           NanoHTTPD subclass with /api/* routes
+│   │   ├── HttpServer.java           /api/* routes + static web assets
 │   │   ├── KeyDispatcher.java        Long-lived input-event injector (runs as shell uid)
 │   │   ├── LauncherActivity.java     Hidden helper activity (not in apps drawer)
 │   │   ├── LocalAdbClient.java       Pure-Java ADB client → loopback adbd
+│   │   ├── MiniHttp.java             Dependency-free HTTP/1.1 server (java.net.ServerSocket)
 │   │   └── PresetStore.java          JSON-backed preset CRUD + apply
 │   ├── assets/web/                   Built web bundle (overwritten by web/ build)
 │   └── build/bridge.apk              Signed APK output

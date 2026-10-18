@@ -4,7 +4,6 @@ ASR="${ANDROID_SDK_ROOT:-/opt/android-sdk}"
 BT=$ASR/build-tools/34.0.0
 PLATFORM=$ASR/platforms/android-34/android.jar
 PROJ="$(cd "$(dirname "$0")" && pwd)"
-NANO=$PROJ/lib/nanohttpd-2.3.1.jar
 OUT=$PROJ/build
 
 rm -rf $OUT
@@ -12,12 +11,11 @@ mkdir -p $OUT/classes $OUT/dex
 
 echo "[1/5] javac"
 javac -encoding UTF-8 -source 1.8 -target 1.8 -bootclasspath $PLATFORM \
-    -cp $NANO \
     -d $OUT/classes $(find $PROJ/src -name "*.java")
 
-echo "[2/5] d8 (classes + libs -> classes.dex)"
+echo "[2/5] d8 (classes -> classes.dex)"
 $BT/d8 --release --output $OUT/dex --lib $PLATFORM \
-    $(find $OUT/classes -name "*.class") $NANO
+    $(find $OUT/classes -name "*.class")
 
 echo "[3/5] aapt2 link (manifest, no resources)"
 $BT/aapt2 link \

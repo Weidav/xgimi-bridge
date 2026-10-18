@@ -1,7 +1,6 @@
 {
     "java.project.referencedLibraries": [
-        "/opt/android-sdk/platforms/android-34/android.jar",
-        "/workspaces/xgimi-bridge/app/lib/nanohttpd-2.3.1.jar",
+        "/opt/android-sdk/platforms/android-34/android.jar"
     ],
     "java.configuration.runtimes": [
         {

@@ -11,16 +11,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-import fi.iki.elonen.NanoHTTPD;
-
-public class HttpServer extends NanoHTTPD {
+public class HttpServer extends MiniHttp {
     private static final String TAG = "XgimiBridge";
     private final Context ctx;
     private final AidlClient aidl;
@@ -43,14 +40,14 @@ public class HttpServer extends NanoHTTPD {
     }
 
     @Override
-    public Response serve(IHTTPSession session) {
-        String uri = session.getUri();
-        Log.i(TAG, session.getMethod() + " " + uri);
+    protected Response serve(Request req) {
+        String uri = req.uri;
+        Log.i(TAG, req.method + " " + uri);
 
         Response r;
         try {
             if (uri.startsWith("/api/")) {
-                r = handleApi(session, uri);
+                r = handleApi(req, uri);
             } else {
                 r = serveAsset(uri);
             }
@@ -61,12 +58,15 @@ public class HttpServer extends NanoHTTPD {
         return r;
     }
 
-    private Response handleApi(IHTTPSession session, String uri) throws IOException {
-        Method m = session.getMethod();
+    private Response handleApi(Request req, String uri) throws IOException {
+        Method m = req.method;
         if (m == Method.POST || m == Method.PUT || m == Method.DELETE) {
-            String origin = session.getHeaders().get("origin");
-            String host = session.getHeaders().get("host");
-            if (origin != null && !origin.isEmpty() && host != null && !host.isEmpty()) {
+            String origin = req.headers.get("origin");
+            String host = req.headers.get("host");
+            if (origin != null && !origin.isEmpty()) {
+                if (host == null || host.trim().isEmpty()) {
+                    return json(Response.Status.FORBIDDEN, errJson("cross-origin request missing host header"));
+                }
                 String originHost = origin.replaceFirst("^https?://", "");
                 int slash = originHost.indexOf('/');
                 if (slash >= 0) originHost = originHost.substring(0, slash);
@@ -140,11 +140,11 @@ public class HttpServer extends NanoHTTPD {
             return json(Response.Status.OK, info.toString());
         }
 
-        if (m == Method.POST && uri.startsWith("/api/picture/")) return handlePictureSet(session, uri);
-        if (m == Method.POST && uri.startsWith("/api/input")) return handleInputSwitch(session, uri);
-        if (uri.startsWith("/api/presets")) return handlePresets(session, uri);
+        if (m == Method.POST && uri.startsWith("/api/picture/")) return handlePictureSet(req, uri);
+        if (m == Method.POST && uri.startsWith("/api/input")) return handleInputSwitch(req, uri);
+        if (uri.startsWith("/api/presets")) return handlePresets(req, uri);
         if (m == Method.POST && uri.startsWith("/api/power/")) return handlePower(uri);
-        if (uri.startsWith("/api/adb/")) return handleAdb(session, uri, m);
+        if (uri.startsWith("/api/adb/")) return handleAdb(req, uri, m);
 
         return json(Response.Status.NOT_FOUND, errJson("no such endpoint"));
     }
@@ -160,7 +160,7 @@ public class HttpServer extends NanoHTTPD {
      *                                     shell has INJECT_EVENTS).
      *   POST /api/adb/text              — sends arbitrary text to the TV via KeyDispatcher.
      */
-    private Response handleAdb(IHTTPSession session, String uri, Method m) {
+    private Response handleAdb(Request req, String uri, Method m) {
         try {
             if (uri.equals("/api/adb/status") && m == Method.GET) {
                 boolean ok = adb.isAuthorized();
@@ -171,12 +171,17 @@ public class HttpServer extends NanoHTTPD {
                 return json(Response.Status.OK, "{\"ok\":true,\"state\":\"" + r + "\"}");
             }
             if (uri.startsWith("/api/adb/keyevent/") && m == Method.POST) {
-                int code = Integer.parseInt(uri.substring("/api/adb/keyevent/".length()));
+                int code;
+                try {
+                    code = Integer.parseInt(uri.substring("/api/adb/keyevent/".length()));
+                } catch (NumberFormatException nfe) {
+                    return json(Response.Status.BAD_REQUEST, errJson("invalid keycode"));
+                }
                 String out = adb.injectKey(code);
                 return json(Response.Status.OK, "{\"ok\":true,\"key\":" + code + ",\"out\":" + jsonString(out) + "}");
             }
             if (uri.equals("/api/adb/text") && m == Method.POST) {
-                JSONObject body = readJsonBody(session);
+                JSONObject body = readJsonBody(req);
                 String text = body.optString("text", "");
                 if (text.isEmpty()) {
                     return json(Response.Status.BAD_REQUEST, errJson("missing text"));
@@ -278,8 +283,8 @@ public class HttpServer extends NanoHTTPD {
         }
     }
 
-    private Response handlePictureSet(IHTTPSession session, String uri) throws IOException {
-        JSONObject body = readJsonBody(session);
+    private Response handlePictureSet(Request req, String uri) throws IOException {
+        JSONObject body = readJsonBody(req);
         String knob = uri.substring("/api/picture/".length());
         if (!knob.equals("reset") && (!body.has("value") || body.isNull("value"))) {
             return json(Response.Status.BAD_REQUEST, errJson("missing value"));
@@ -324,8 +329,8 @@ public class HttpServer extends NanoHTTPD {
     }
 
 
-    private Response handleInputSwitch(IHTTPSession session, String uri) throws IOException {
-        JSONObject body = readJsonBody(session);
+    private Response handleInputSwitch(Request req, String uri) throws IOException {
+        JSONObject body = readJsonBody(req);
         String to = body.optString("to", "").toUpperCase();
 
         if (to.isEmpty()) {
@@ -386,8 +391,8 @@ public class HttpServer extends NanoHTTPD {
         return fallback;
     }
 
-    private Response handlePresets(IHTTPSession session, String uri) throws IOException {
-        Method m = session.getMethod();
+    private Response handlePresets(Request req, String uri) throws IOException {
+        Method m = req.method;
         // Routes:
         //   GET    /api/presets
         //   POST   /api/presets                    (create)
@@ -400,7 +405,7 @@ public class HttpServer extends NanoHTTPD {
                 return json(Response.Status.OK, presets.load().toString());
             }
             if (uri.equals("/api/presets") && m == Method.POST) {
-                JSONObject body = readJsonBody(session);
+                JSONObject body = readJsonBody(req);
                 JSONObject created = presets.create(body);
                 return json(Response.Status.OK, created.toString());
             }
@@ -411,7 +416,7 @@ public class HttpServer extends NanoHTTPD {
             if (id.isEmpty()) return json(Response.Status.NOT_FOUND, errJson("preset id missing"));
 
             if (sub.isEmpty() && m == Method.PUT) {
-                JSONObject body = readJsonBody(session);
+                JSONObject body = readJsonBody(req);
                 JSONObject p = presets.update(id, body);
                 if (p == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
                 return json(Response.Status.OK, p.toString());
@@ -427,7 +432,7 @@ public class HttpServer extends NanoHTTPD {
                 }
             }
             if (sub.equals("sync") && m == Method.POST) {
-                JSONObject body = readJsonBody(session);
+                JSONObject body = readJsonBody(req);
                 JSONObject p = presets.syncFromCurrent(id, body);
                 if (p == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
                 return json(Response.Status.OK, p.toString());
@@ -443,40 +448,13 @@ public class HttpServer extends NanoHTTPD {
         }
     }
 
-    private JSONObject readJsonBody(IHTTPSession session) {
-        String ct = session.getHeaders().get("content-type");
-        boolean isJson = ct != null && ct.toLowerCase().contains("application/json");
-        String raw = null;
-
-        if (isJson) {
-            // Read raw -- DO NOT call parseBody (it consumes the stream and discards the body
-            // for unrecognized content-types or for PUT in some versions of NanoHTTPD).
-            try {
-                String len = session.getHeaders().get("content-length");
-                int n = (len != null) ? Integer.parseInt(len) : 0;
-                if (n > 0 && n <= 65536) {
-                    byte[] buf = new byte[n];
-                    int read = 0;
-                    while (read < n) {
-                        int got = session.getInputStream().read(buf, read, n - read);
-                        if (got < 0) break;
-                        read += got;
-                    }
-                    raw = new String(buf, 0, read, "UTF-8");
-                }
-            } catch (Exception e) { Log.w(TAG, "raw body read failed", e); }
-        } else {
-            // Form-encoded etc -- use parseBody.
-            Map<String, String> files = new HashMap<>();
-            try {
-                session.parseBody(files);
-                raw = files.get("postData");
-            } catch (Exception e) { /* ignore */ }
-        }
-
-        Log.i(TAG, "body bytes=" + (raw == null ? 0 : raw.length()) + " ct=" + ct);
-        if (raw == null || raw.isEmpty()) return new JSONObject();
-        try { return new JSONObject(raw); } catch (JSONException e) {
+    private JSONObject readJsonBody(Request req) {
+        if (req.body == null || req.body.length == 0) return new JSONObject();
+        String raw = new String(req.body, java.nio.charset.StandardCharsets.UTF_8);
+        Log.i(TAG, "body bytes=" + req.body.length);
+        try {
+            return new JSONObject(raw);
+        } catch (JSONException e) {
             Log.w(TAG, "json parse failed: " + raw);
             return new JSONObject();
         }
@@ -492,6 +470,9 @@ public class HttpServer extends NanoHTTPD {
     private Response serveAsset(String uri) {
         String path = uri.equals("/") ? "/index.html" : uri;
         if (path.startsWith("/")) path = path.substring(1);
+        if (path.contains("..") || path.contains("//")) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found");
+        }
         String assetPath = "web/" + path;
         AssetManager am = ctx.getAssets();
         try (InputStream is = am.open(assetPath)) {
@@ -499,8 +480,7 @@ public class HttpServer extends NanoHTTPD {
             byte[] buf = new byte[8192]; int n;
             while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
             byte[] data = out.toByteArray();
-            Response r = newFixedLengthResponse(Response.Status.OK, mimeFor(path),
-                new ByteArrayInputStream(data), data.length);
+            Response r = newFixedLengthResponse(Response.Status.OK, mimeFor(path), data);
             // Aggressive HTTP-cache so iOS PWAs (added to Home Screen) keep the shell on
             // disk and survive a flat connection. Hashed assets under /assets/ have the
             // bundle hash baked into their filename (e.g. index-Bf70jWtl.js), so they
