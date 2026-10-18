@@ -476,14 +476,24 @@ export default function App() {
     <div className="screen">
       <header className="hdr">
         <div className="hdr-row">
-          <div>
+          <div className="hdr-title-row">
             <h1>Xgimi Remote</h1>
-            <p className={"subtitle" + (connected ? "" : " subtitle-offline")}>
-              {connected
-                ? (picture ? sourceTitle(picture, inputs) : (state?.ready ? "Connected" : "Connecting..."))
-                : "Disconnected — projector unreachable"}
-              {connected && busy && " · sending"}
-            </p>
+            <button
+              type="button"
+              className={"hdr-source-badge" + (connected ? "" : " is-offline")}
+              onClick={connected ? () => setSourceOpen(true) : undefined}
+              disabled={!connected || busy}
+              title={connected ? "Change input source" : "Projector unreachable"}
+              aria-label={connected ? `Input source: ${sourceTitle(picture, inputs) || "Connected"}. Click to change.` : "Projector unreachable"}
+            >
+              <span className={"hdr-source-dot" + (connected ? "" : " is-offline")} />
+              <span className="hdr-source-name">
+                {connected
+                  ? (picture ? sourceTitle(picture, inputs) : (state?.ready ? "Connected" : "Connecting..."))
+                  : "Offline"}
+              </span>
+              {connected && busy && <span className="hdr-source-busy">· sending</span>}
+            </button>
           </div>
           <div className="hdr-actions">
             <button
@@ -808,8 +818,7 @@ function HoldButton({ keyCode, sendKey, repeat = true, className = "rc-btn", chi
 
 function RemoteCard({ sendKey, onSendText, onOpenPower, onOpenSource, busy }) {
   return (
-    <section className="card rc-card">
-      <h2>Remote</h2>
+    <section className="rc-wrap" aria-label="Virtual Remote">
       <div className="rc-shell">
         <div className="rc-face">
           {/* Top row: Power (left) + Google Assistant (right) */}
