@@ -79,7 +79,9 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
     def options(self) -> list[str]:
         """Return list of available preset names."""
         presets = self.coordinator.data.get("presets", [])
-        names = [p.get("name") for p in presets if isinstance(p, dict) and p.get("name")]
+        names = [
+            p.get("name") for p in presets if isinstance(p, dict) and p.get("name")
+        ]
         return names if names else ["Balanced"]
 
     @property
@@ -94,7 +96,9 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
             if isinstance(p, dict) and p.get("name") == option:
                 preset_id = p.get("id")
                 if preset_id:
-                    if await self.coordinator.async_post_json(f"/api/presets/{preset_id}/apply"):
+                    if await self.coordinator.async_post_json(
+                        f"/api/presets/{preset_id}/apply"
+                    ):
                         self._current_preset_name = option
                         self.async_write_ha_state()
                 break
@@ -121,7 +125,9 @@ class XgimiPictureModeSelect(XgimiEntity, SelectEntity):
         """Set picture mode."""
         val = PICTURE_MODE_REV.get(option)
         if val is not None:
-            await self.coordinator.async_post_json("/api/picture/picture-mode", {"value": val})
+            await self.coordinator.async_post_json(
+                "/api/picture/picture-mode", {"value": val}
+            )
 
 
 class XgimiColorTempSelect(XgimiEntity, SelectEntity):
@@ -145,7 +151,9 @@ class XgimiColorTempSelect(XgimiEntity, SelectEntity):
         """Set color temperature."""
         val = COLOR_TEMP_REV.get(option)
         if val is not None:
-            await self.coordinator.async_post_json("/api/picture/color-temp", {"value": val})
+            await self.coordinator.async_post_json(
+                "/api/picture/color-temp", {"value": val}
+            )
 
 
 class XgimiGameModeSelect(XgimiEntity, SelectEntity):
@@ -169,4 +177,6 @@ class XgimiGameModeSelect(XgimiEntity, SelectEntity):
         """Set game mode."""
         val = GAME_MODE_REV.get(option)
         if val is not None:
-            await self.coordinator.async_post_json("/api/picture/game-mode", {"value": val})
+            await self.coordinator.async_post_json(
+                "/api/picture/game-mode", {"value": val}
+            )

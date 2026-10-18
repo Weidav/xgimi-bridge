@@ -8,5 +8,8 @@
             "path": "/usr/lib/jvm/msopenjdk-current",
             "default": true
         }
-    ]
+    ],
+    "[markdown]": {
+        "editor.defaultFormatter": "yzhang.markdown-all-in-one"
+    },
 }

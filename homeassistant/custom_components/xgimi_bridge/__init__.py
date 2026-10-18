@@ -65,7 +65,9 @@ class XgimiEntity(CoordinatorEntity[XgimiDataUpdateCoordinator]):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: XgimiDataUpdateCoordinator, unique_suffix: str) -> None:
+    def __init__(
+        self, coordinator: XgimiDataUpdateCoordinator, unique_suffix: str
+    ) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
         self._unique_suffix = unique_suffix

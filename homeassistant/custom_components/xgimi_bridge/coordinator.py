@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 import logging
+from datetime import timedelta
 from typing import Any
 
 import aiohttp
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CAST_WAKE_PORT, DEFAULT_PORT, DOMAIN, REMOTE_WAKE_PORT, WAKE_PORT
+from .const import CAST_WAKE_PORT, DEFAULT_PORT, REMOTE_WAKE_PORT, WAKE_PORT
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=10)
@@ -46,7 +45,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         presets_url = f"http://{self.host}:{DEFAULT_PORT}/api/presets"
 
         try:
-            async with self.session.get(pic_url, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
+            async with self.session.get(
+                pic_url, timeout=aiohttp.ClientTimeout(total=3.0)
+            ) as resp:
                 if resp.status == 200:
                     pic = await resp.json()
                     self._last_data["picture"] = pic
@@ -62,7 +63,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if self._last_data["online"]:
             try:
-                async with self.session.get(presets_url, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
+                async with self.session.get(
+                    presets_url, timeout=aiohttp.ClientTimeout(total=3.0)
+                ) as resp:
                     if resp.status == 200:
                         presets = await resp.json()
                         if isinstance(presets, list):
@@ -91,7 +94,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         wake_url = f"http://{self.host}:{WAKE_PORT}/wake"
         for _ in range(4):
             try:
-                async with self.session.post(wake_url, timeout=aiohttp.ClientTimeout(total=1.2)) as resp:
+                async with self.session.post(
+                    wake_url, timeout=aiohttp.ClientTimeout(total=1.2)
+                ) as resp:
                     if resp.status == 200:
                         woke = True
                         break
@@ -102,7 +107,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not woke:
             try:
                 on_url = f"http://{self.host}:{DEFAULT_PORT}/api/power/on"
-                async with self.session.post(on_url, timeout=aiohttp.ClientTimeout(total=1.5)):
+                async with self.session.post(
+                    on_url, timeout=aiohttp.ClientTimeout(total=1.5)
+                ):
                     pass
             except Exception:
                 pass
@@ -110,7 +117,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_data["awake"] = True
         self._last_data["online"] = True
         self.async_set_updated_data(self._last_data)
-        self.hass.loop.call_later(2.0, lambda: self.hass.async_create_task(self.async_request_refresh()))
+        self.hass.loop.call_later(
+            2.0, lambda: self.hass.async_create_task(self.async_request_refresh())
+        )
 
     async def async_turn_off(self) -> None:
         """Put projector display into standby."""
@@ -122,13 +131,19 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             pass
         self._last_data["awake"] = False
         self.async_set_updated_data(self._last_data)
-        self.hass.loop.call_later(2.0, lambda: self.hass.async_create_task(self.async_request_refresh()))
+        self.hass.loop.call_later(
+            2.0, lambda: self.hass.async_create_task(self.async_request_refresh())
+        )
 
-    async def async_post_json(self, path: str, body: dict[str, Any] | None = None) -> bool:
+    async def async_post_json(
+        self, path: str, body: dict[str, Any] | None = None
+    ) -> bool:
         """Send a mutating POST request to the bridge."""
         url = f"http://{self.host}:{DEFAULT_PORT}{path}"
         try:
-            async with self.session.post(url, json=body, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
+            async with self.session.post(
+                url, json=body, timeout=aiohttp.ClientTimeout(total=3.0)
+            ) as resp:
                 if resp.status == 200:
                     await self.async_request_refresh()
                     return True

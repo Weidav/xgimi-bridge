@@ -1,17 +1,17 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
 const KNOBS = [
-  { key: "wbRed",   ep: "wb-red",   label: "Red gain",   accent: "#ff453a" },
+  { key: "wbRed", ep: "wb-red", label: "Red gain", accent: "#ff453a" },
   { key: "wbGreen", ep: "wb-green", label: "Green gain", accent: "#30d158" },
-  { key: "wbBlue",  ep: "wb-blue",  label: "Blue gain",  accent: "#0a84ff" },
+  { key: "wbBlue", ep: "wb-blue", label: "Blue gain", accent: "#0a84ff" },
 ];
 
 const PICTURE_ITEMS = [
   { key: "brightness", ep: "brightness", label: "Brightness", accent: "#f5f5f7" },
-  { key: "contrast",   ep: "contrast",   label: "Contrast",   accent: "#f5f5f7" },
+  { key: "contrast", ep: "contrast", label: "Contrast", accent: "#f5f5f7" },
   { key: "saturation", ep: "saturation", label: "Saturation", accent: "#f5f5f7" },
-  { key: "sharpness",  ep: "sharpness",  label: "Sharpness",  accent: "#f5f5f7" },
-  { key: "hue",        ep: "hue",        label: "Hue",        accent: "#f5f5f7" },
+  { key: "sharpness", ep: "sharpness", label: "Sharpness", accent: "#f5f5f7" },
+  { key: "hue", ep: "hue", label: "Hue", accent: "#f5f5f7" },
 ];
 
 const PICTURE_MODE_OPTIONS = [
@@ -341,7 +341,7 @@ export default function App() {
           setAdbAuthorized(true);
           setAuthorizing(false);
         }
-      } catch (_) {}
+      } catch (_) { }
     }, 1000);
     return () => { cancelled = true; clearInterval(t); };
   }, [authorizing]);
@@ -418,10 +418,10 @@ export default function App() {
       // The AIDL `currentInputSource` lags (HDMI switch updates it; the Apps path just fires a
       // launcher intent and xgimiservice doesn't notice). Optimistically reflect the user's pick.
       const aidlSource = to === "STORAGE" ? "E_INPUT_SOURCE_STORAGE"
-                       : to === "HDMI1"   ? "E_INPUT_SOURCE_HDMI1"
-                       : to === "HDMI2"   ? "E_INPUT_SOURCE_HDMI2"
-                       : to === "HDMI3"   ? "E_INPUT_SOURCE_HDMI3"
-                       : null;
+        : to === "HDMI1" ? "E_INPUT_SOURCE_HDMI1"
+          : to === "HDMI2" ? "E_INPUT_SOURCE_HDMI2"
+            : to === "HDMI3" ? "E_INPUT_SOURCE_HDMI3"
+              : null;
       // Then re-fetch picture (per-source picture-mode/colorTemp may differ); merge so the
       // optimistic source isn't clobbered if AIDL hasn't caught up yet.
       try {
@@ -652,9 +652,9 @@ function SourceSheet({ inputs, picture, runningApp: initialRunningApp, busy, onP
           api("/api/info").then((info) => {
             const app = info?.categories?.display?.runningApp;
             if (app) setRunningApp(app);
-          }).catch(() => {});
+          }).catch(() => { });
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [runningApp]);
 
@@ -878,25 +878,25 @@ function RemoteCard({
 
           {/* D-pad ring — bare spun-metal circle with bare concave center OK button */}
           <div className="rc-dpad">
-            <HoldButton keyCode={KEY.DPAD_UP}     sendKey={sendKey} className="rc-dpad-up"     ariaLabel="Up" />
-            <HoldButton keyCode={KEY.DPAD_LEFT}   sendKey={sendKey} className="rc-dpad-left"   ariaLabel="Left" />
+            <HoldButton keyCode={KEY.DPAD_UP} sendKey={sendKey} className="rc-dpad-up" ariaLabel="Up" />
+            <HoldButton keyCode={KEY.DPAD_LEFT} sendKey={sendKey} className="rc-dpad-left" ariaLabel="Left" />
             <HoldButton keyCode={KEY.DPAD_CENTER} sendKey={sendKey} repeat={false} className="rc-dpad-center" ariaLabel="OK" />
-            <HoldButton keyCode={KEY.DPAD_RIGHT}  sendKey={sendKey} className="rc-dpad-right"  ariaLabel="Right" />
-            <HoldButton keyCode={KEY.DPAD_DOWN}   sendKey={sendKey} className="rc-dpad-down"   ariaLabel="Down" />
+            <HoldButton keyCode={KEY.DPAD_RIGHT} sendKey={sendKey} className="rc-dpad-right" ariaLabel="Right" />
+            <HoldButton keyCode={KEY.DPAD_DOWN} sendKey={sendKey} className="rc-dpad-down" ariaLabel="Down" />
           </div>
 
           {/* Row below D-pad: Back (left) + Settings (center) + Home (right) */}
           <div className="rc-row rc-mid-row">
-            <HoldButton keyCode={KEY.BACK}     sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Back"><BackIcon /></HoldButton>
+            <HoldButton keyCode={KEY.BACK} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Back"><BackIcon /></HoldButton>
             <HoldButton keyCode={KEY.SETTINGS} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Settings"><SettingsIcon /></HoldButton>
-            <HoldButton keyCode={KEY.HOME}     sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Home"><HomeIcon /></HoldButton>
+            <HoldButton keyCode={KEY.HOME} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Home"><HomeIcon /></HoldButton>
           </div>
 
           {/* Bottom row: Volume down (left) + Mute (center) + Volume up (right) */}
           <div className="rc-row rc-vol-row">
             <HoldButton keyCode={KEY.VOLUME_DOWN} sendKey={sendKey} className="rc-btn" ariaLabel="Volume down"><MinusIcon /></HoldButton>
             <HoldButton keyCode={KEY.VOLUME_MUTE} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Mute"><MuteIcon /></HoldButton>
-            <HoldButton keyCode={KEY.VOLUME_UP}   sendKey={sendKey} className="rc-btn" ariaLabel="Volume up"><PlusIcon /></HoldButton>
+            <HoldButton keyCode={KEY.VOLUME_UP} sendKey={sendKey} className="rc-btn" ariaLabel="Volume up"><PlusIcon /></HoldButton>
           </div>
         </div>
       </div>
@@ -996,10 +996,10 @@ function MuteIcon() {
 }
 
 function MinusIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/></svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12" /></svg>;
 }
 function PlusIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12" /><line x1="12" y1="6" x2="12" y2="18" /></svg>;
 }
 
 
@@ -1396,7 +1396,7 @@ function InfoSheet({ onClose }) {
       await navigator.clipboard.writeText(JSON.stringify(info, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   const summary = info?.summary || {};
@@ -1541,27 +1541,27 @@ function InfoSheet({ onClose }) {
                   // Check if special structured arrays match filter
                   const sensors = sec.id === "thermal_power" && Array.isArray(catObj.temperatureSensors)
                     ? catObj.temperatureSensors.filter((s) =>
-                        !q ||
-                        String(s.name).toLowerCase().includes(q) ||
-                        "temperature sensors".includes(q) ||
-                        sec.title.toLowerCase().includes(q)
-                      )
+                      !q ||
+                      String(s.name).toLowerCase().includes(q) ||
+                      "temperature sensors".includes(q) ||
+                      sec.title.toLowerCase().includes(q)
+                    )
                     : [];
                   const fans = sec.id === "thermal_power" && Array.isArray(catObj.fans)
                     ? catObj.fans.filter((f) =>
-                        !q ||
-                        `fan ${f.index + 1}`.includes(q) ||
-                        "fan speeds".includes(q) ||
-                        sec.title.toLowerCase().includes(q)
-                      )
+                      !q ||
+                      `fan ${f.index + 1}`.includes(q) ||
+                      "fan speeds".includes(q) ||
+                      sec.title.toLowerCase().includes(q)
+                    )
                     : [];
                   const cecDevices = sec.id === "hdmi_cec" && Array.isArray(catObj.cecDevices)
                     ? catObj.cecDevices.filter((d) =>
-                        !q ||
-                        String(d.displayName || "").toLowerCase().includes(q) ||
-                        String(d.physicalAddress || "").toLowerCase().includes(q) ||
-                        "cec".includes(q)
-                      )
+                      !q ||
+                      String(d.displayName || "").toLowerCase().includes(q) ||
+                      String(d.physicalAddress || "").toLowerCase().includes(q) ||
+                      "cec".includes(q)
+                    )
                     : [];
                   const rgbRaw = sec.id === "brightness_picture" ? catObj.rgbLevelsRaw : null;
 
@@ -1726,4 +1726,3 @@ function InfoSheet({ onClose }) {
     </div>
   );
 }
-
