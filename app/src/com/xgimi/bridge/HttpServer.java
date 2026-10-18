@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.os.RemoteException;
+import android.provider.Settings;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -81,6 +82,7 @@ public class HttpServer extends NanoHTTPD {
                 o.put("ready", aidl.isReady())
                  .put("awake", isAwake())
                  .put("port", 8080)
+                 .put("runningApp", getRunningApp(ctx))
                  .put("ts", System.currentTimeMillis());
             } catch (JSONException e) {}
             return json(Response.Status.OK, o.toString());
@@ -126,6 +128,7 @@ public class HttpServer extends NanoHTTPD {
         if (uri.equals("/api/picture") && m == Method.GET) {
             java.util.Map<String,Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
+            snap.put("runningApp", getRunningApp(ctx));
             // wrap nested maps as JSONObjects so JSONObject does not toString() them
             for (java.util.Map.Entry<String,Object> e : snap.entrySet()) {
                 if (e.getValue() instanceof java.util.Map) e.setValue(new JSONObject((java.util.Map) e.getValue()));
@@ -205,6 +208,24 @@ public class HttpServer extends NanoHTTPD {
     private boolean isAwake() {
         android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
         return pm == null || pm.isInteractive();
+    }
+
+    static String getRunningApp(Context ctx) {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            java.lang.reflect.Method get = sp.getMethod("get", String.class, String.class);
+            String prop = (String) get.invoke(null, "sys.mtk.running.application", "");
+            if (prop != null && !prop.trim().isEmpty() && !"null".equalsIgnoreCase(prop.trim())) {
+                return prop.trim();
+            }
+        } catch (Throwable ignore) {}
+        try {
+            String pkg = Settings.Global.getString(ctx.getContentResolver(), "running_package_name");
+            if (pkg != null && !pkg.trim().isEmpty() && !"null".equalsIgnoreCase(pkg.trim())) {
+                return pkg.trim();
+            }
+        } catch (Throwable ignore) {}
+        return null;
     }
 
     /**

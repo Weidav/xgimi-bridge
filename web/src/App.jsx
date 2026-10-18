@@ -59,6 +59,20 @@ function sourceTitle(picture, inputs) {
   return src || "";
 }
 
+function formatAppName(pkg) {
+  if (!pkg || typeof pkg !== "string") return "";
+  const trimmed = pkg.trim();
+  const lastDot = trimmed.lastIndexOf(".");
+  if (lastDot === -1) {
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  }
+  const beforeLastDot = trimmed.substring(0, lastDot);
+  const prevDot = beforeLastDot.lastIndexOf(".");
+  const name = prevDot === -1 ? beforeLastDot : beforeLastDot.substring(prevDot + 1);
+  if (!name) return "";
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 function PinIcon() {
   return (
     <svg className="pin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -553,7 +567,7 @@ export default function App() {
             </span>
           </summary>
           {!picture && <p className="muted">loading…</p>}
-          {picture && onStorage && <p className="muted">Not applicable on Apps. Switch to HDMI to adjust.</p>}
+          {picture && onStorage && <p className="muted">Not applicable on Android TV. Switch to HDMI to adjust.</p>}
           {picture && !onStorage && (
             <>
               <OptionRow label="Color temp" options={COLOR_TEMP_OPTIONS}
@@ -571,7 +585,7 @@ export default function App() {
         <details className="sub-card">
           <summary><h3>Picture</h3></summary>
           {!picture && <p className="muted">loading…</p>}
-          {picture && onStorage && <p className="muted">Not applicable on Apps. Switch to HDMI to adjust.</p>}
+          {picture && onStorage && <p className="muted">Not applicable on Android TV. Switch to HDMI to adjust.</p>}
           {picture && !onStorage && (
             <>
               <OptionRow label="Mode" options={PICTURE_MODE_OPTIONS}
@@ -606,6 +620,7 @@ export default function App() {
         <SourceSheet
           inputs={inputs}
           picture={picture}
+          runningApp={state?.runningApp || picture?.runningApp}
           busy={busy}
           onPick={switchInput}
           onClose={() => setSourceOpen(false)}
@@ -621,8 +636,29 @@ export default function App() {
   );
 }
 
-function SourceSheet({ inputs, picture, busy, onPick, onClose }) {
+function SourceSheet({ inputs, picture, runningApp: initialRunningApp, busy, onPick, onClose }) {
+  const [runningApp, setRunningApp] = useState(initialRunningApp);
   const current = picture?.currentInputSource;
+
+  useEffect(() => {
+    setRunningApp(initialRunningApp);
+  }, [initialRunningApp]);
+
+  useEffect(() => {
+    if (!runningApp) {
+      api("/api/state").then((s) => {
+        if (s?.runningApp) setRunningApp(s.runningApp);
+        else {
+          api("/api/info").then((info) => {
+            const app = info?.categories?.display?.runningApp;
+            if (app) setRunningApp(app);
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  }, [runningApp]);
+
+  const appName = formatAppName(runningApp);
   function activeFor(src) { return current === src ? " input-btn-active" : ""; }
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -630,7 +666,8 @@ function SourceSheet({ inputs, picture, busy, onPick, onClose }) {
         <h3 className="modal-title">Source</h3>
         <div className="input-rows">
           <button className={"input-btn input-btn-row" + activeFor("E_INPUT_SOURCE_STORAGE")} onClick={() => onPick("STORAGE")} disabled={busy}>
-            <span>Apps</span><small>Android TV</small>
+            <span>Android TV</span>
+            {appName && <small>{appName}</small>}
           </button>
           {[1, 2].map((port) => {
             const cec = inputLabelForPort(inputs, port, "");
