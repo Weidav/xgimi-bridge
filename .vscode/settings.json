@@ -1,0 +1,13 @@
+{
+    "java.project.referencedLibraries": [
+        "/opt/android-sdk/platforms/android-34/android.jar",
+        "/workspaces/xgimi-bridge/app/lib/nanohttpd-2.3.1.jar",
+    ],
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-1.8",
+            "path": "/usr/lib/jvm/msopenjdk-current",
+            "default": true
+        }
+    ]
+}
