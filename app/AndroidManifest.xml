@@ -9,7 +9,7 @@
     <!-- Required by JobInfo.Builder.setPersisted(true); we never receive the broadcast itself. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -24,7 +24,7 @@
 
         <service android:name=".BridgeService"
                  android:exported="false"
-                 android:foregroundServiceType="connectedDevice" />
+                 android:foregroundServiceType="dataSync" />
     </application>
 
     <uses-sdk android:minSdkVersion="34" android:targetSdkVersion="34" />
