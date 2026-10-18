@@ -675,22 +675,25 @@ public class ProjectorInfoCollector {
                         }
                         put(o, "supportedModes", arr);
                     }
+                    Display.Mode activeMode = mode != null ? mode : (modes != null && modes.length > 0 ? modes[0] : null);
+                    if (activeMode != null) {
+                        int[] types = activeMode.getSupportedHdrTypes();
+                        if (types != null) {
+                            StringBuilder sb = new StringBuilder();
+                            for (int t : types) {
+                                if (sb.length() > 0) sb.append(", ");
+                                if (t == Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION) sb.append("Dolby Vision");
+                                else if (t == Display.HdrCapabilities.HDR_TYPE_HDR10) sb.append("HDR10");
+                                else if (t == Display.HdrCapabilities.HDR_TYPE_HLG) sb.append("HLG");
+                                else if (t == Display.HdrCapabilities.HDR_TYPE_HDR10_PLUS) sb.append("HDR10+");
+                                else sb.append("Type ").append(t);
+                            }
+                            put(o, "supportedHdrTypes", sb.toString());
+                        }
+                    }
                     if (Build.VERSION.SDK_INT >= 24) {
                         Display.HdrCapabilities hdr = d.getHdrCapabilities();
                         if (hdr != null) {
-                            int[] types = hdr.getSupportedHdrTypes();
-                            StringBuilder sb = new StringBuilder();
-                            if (types != null) {
-                                for (int t : types) {
-                                    if (sb.length() > 0) sb.append(", ");
-                                    if (t == 1) sb.append("Dolby Vision");
-                                    else if (t == 2) sb.append("HDR10");
-                                    else if (t == 3) sb.append("HLG");
-                                    else if (t == 4) sb.append("HDR10+");
-                                    else sb.append("Type ").append(t);
-                                }
-                            }
-                            put(o, "supportedHdrTypes", sb.toString());
                             put(o, "hdrMaxLuminance", Math.round(hdr.getDesiredMaxLuminance() * 10.0) / 10.0);
                             put(o, "hdrMaxAvgLuminance", Math.round(hdr.getDesiredMaxAverageLuminance() * 10.0) / 10.0);
                             put(o, "hdrMinLuminance", Math.round(hdr.getDesiredMinLuminance() * 1000.0) / 1000.0);

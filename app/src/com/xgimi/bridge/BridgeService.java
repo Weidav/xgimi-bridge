@@ -7,7 +7,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
-import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
@@ -74,7 +73,7 @@ public class BridgeService extends Service {
             }
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm != null) {
-                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "XgimiBridge:wifi");
+                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "XgimiBridge:wifi");
                 wifiLock.setReferenceCounted(false);
                 wifiLock.acquire();
             }
@@ -91,26 +90,14 @@ public class BridgeService extends Service {
 
     private void startInForeground() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Bridge", NotificationManager.IMPORTANCE_LOW);
-            nm.createNotificationChannel(ch);
-        }
-        Notification n;
-        if (Build.VERSION.SDK_INT >= 26) {
-            n = new Notification.Builder(this, CHANNEL_ID)
+        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Bridge", NotificationManager.IMPORTANCE_LOW);
+        if (nm != null) nm.createNotificationChannel(ch);
+        Notification n = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_info_details)
                 .setContentTitle("Xgimi Bridge")
                 .setContentText("HTTP on port " + HTTP_PORT)
                 .setOngoing(true)
                 .build();
-        } else {
-            n = new Notification.Builder(this)
-                .setSmallIcon(android.R.drawable.ic_menu_info_details)
-                .setContentTitle("Xgimi Bridge")
-                .setContentText("HTTP on port " + HTTP_PORT)
-                .setOngoing(true)
-                .build();
-        }
         startForeground(NOTIF_ID, n);
     }
 }

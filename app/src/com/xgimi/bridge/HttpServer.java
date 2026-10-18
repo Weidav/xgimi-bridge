@@ -14,7 +14,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.Map;
 
 public class HttpServer extends MiniHttp {
@@ -130,12 +129,12 @@ public class HttpServer extends MiniHttp {
             }
         }
         if (uri.equals("/api/picture") && isGetOrHead(m)) {
-            java.util.Map<String,Object> snap = aidl.snapshot();
+            Map<String,Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
             snap.put("runningApp", getRunningApp(ctx));
             // wrap nested maps as JSONObjects so JSONObject does not toString() them
-            for (java.util.Map.Entry<String,Object> e : snap.entrySet()) {
-                if (e.getValue() instanceof java.util.Map) e.setValue(new JSONObject((java.util.Map) e.getValue()));
+            for (Map.Entry<String,Object> e : snap.entrySet()) {
+                if (e.getValue() instanceof Map) e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
             }
             return json(Response.Status.OK, new JSONObject(snap).toString());
         }
@@ -349,10 +348,10 @@ public class HttpServer extends MiniHttp {
                     am.killBackgroundProcesses("com.google.android.tv.inputplayer");
                 } catch (Throwable ignore) {}
                 // Bring Google TV home launcher to front
-                android.content.Intent home = new android.content.Intent(android.content.Intent.ACTION_MAIN)
-                    .addCategory(android.content.Intent.CATEGORY_HOME);
-                home.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                    | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                Intent home = new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME);
+                home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 ctx.startActivity(home);
                 return json(Response.Status.OK, "{\"ok\":true,\"to\":\"STORAGE\"}");
             }
@@ -361,10 +360,10 @@ public class HttpServer extends MiniHttp {
             }
             int port = Integer.parseInt(to.substring(4));
             String inputId = findHdmiPassthroughInputId(port);
-            android.content.Intent it = new android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
+            Intent it = new Intent(
+                Intent.ACTION_VIEW,
                 android.media.tv.TvContract.buildChannelUriForPassthroughInput(inputId));
-            it.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            it.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             ctx.startActivity(it);
             return json(Response.Status.OK, "{\"ok\":true,\"to\":\"" + to + "\"}");
         } catch (Throwable t) {

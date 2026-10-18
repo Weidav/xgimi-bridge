@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Persists picture presets as JSON in the app private files dir.
@@ -198,7 +199,10 @@ public class PresetStore {
         return null;
     }
 
-    public static class BuiltinException extends RuntimeException { public BuiltinException(String s){super(s);} }
+    public static class BuiltinException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        public BuiltinException(String s) { super(s); }
+    }
 
     public synchronized boolean delete(String id) throws IOException, JSONException {
         JSONArray arr = load();
@@ -220,10 +224,10 @@ public class PresetStore {
             if (id.equals(p.getString("id"))) {
                 JSONObject v = p.optJSONObject("values");
                 if (v != null) applyValues(v);
-                java.util.Map<String, Object> snap = aidl.snapshot();
-                for (java.util.Map.Entry<String, Object> e : snap.entrySet()) {
-                    if (e.getValue() instanceof java.util.Map) {
-                        e.setValue(new JSONObject((java.util.Map) e.getValue()));
+                Map<String, Object> snap = aidl.snapshot();
+                for (Map.Entry<String, Object> e : snap.entrySet()) {
+                    if (e.getValue() instanceof Map) {
+                        e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
                     }
                 }
                 JSONObject reply = new JSONObject();
