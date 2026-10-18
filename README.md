@@ -107,6 +107,22 @@ Prebuilt APKs are attached to each [GitHub Release](https://github.com/andotsy/x
 
 ## Build & install
 
+### One-liner build & deploy
+
+Run directly from the repository root:
+
+```bash
+npm --prefix web run build && (cd app && ./build.sh && ./install.sh)
+```
+
+Or pass the projector IP/host explicitly if not already paired:
+
+```bash
+npm --prefix web run build && (cd app && ./build.sh && PROJECTOR=192.168.0.55 ./install.sh)
+```
+
+### Step-by-step
+
 ```bash
 # 1) Build the web app (writes the bundle into app/assets/web/)
 cd web && npm install && npm run build
@@ -222,7 +238,7 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 ## Rebuild only the web app
 
 ```bash
-cd web && npm run build && cd ../app && ./build.sh && ./install.sh
+npm --prefix web run build && (cd app && ./build.sh && ./install.sh)
 ```
 
 The Vite build writes directly into `app/assets/web/`, which `build.sh` zips into the APK.
