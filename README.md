@@ -1,8 +1,8 @@
-# Xgimi Bridge
+# XGIMI Horizon 20
 
 <p align="center"><img src="docs/demo.gif" alt="Xgimi Bridge web app in action" width="300"></p>
 
-Background-only Android service for an **XGIMI Horizon 20** projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
+Background-only Android service for an **XGIMI Horizon 20** (Base, Pro & Max) projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
 
 - HTTP API on port **8080**
 - Web UI on the same port — works in any modern mobile or desktop browser; add to your phone's home screen (iOS Safari "Add to Home Screen", Android Chrome "Install app") for a standalone-app feel. The bridge sets long `Cache-Control` headers on the hashed asset bundle so the OS keeps the shell on disk after first load. A "Disconnected" badge surfaces in the header when the bridge is unreachable.
@@ -15,7 +15,7 @@ Background-only Android service for an **XGIMI Horizon 20** projector that expos
 
 ## What works
 
-- D-pad / OK / back / home / menu — full remote navigation
+- D-pad / OK / back / home — full remote navigation
 - Volume up / down / mute
 - Power (display on/off, same toggle as the physical remote)
 - Settings / gear (opens Google TV settings dashboard)
@@ -231,10 +231,10 @@ The Vite build writes directly into `app/assets/web/`, which `build.sh` zips int
 
 The web client uses standard Android keycodes for most buttons (`KEYCODE_DPAD_*`, `KEYCODE_BACK`, `KEYCODE_VOLUME_*`, etc.) and a few Xgimi-custom ones:
 
-| Keycode | Constant           | Triggered by                              |
-|---------|--------------------|-------------------------------------------|
-| 140     | `KEYCODE_F10`      | Physical focus button                     |
-| 26      | `KEYCODE_POWER`    | Physical power button                     |
-| 176     | `KEYCODE_SETTINGS` | Physical gear / settings button           |
+| Keycode | Constant           | Triggered by                    |
+| ------- | ------------------ | ------------------------------- |
+| 140     | `KEYCODE_F10`      | Physical focus button           |
+| 26      | `KEYCODE_POWER`    | Physical power button           |
+| 176     | `KEYCODE_SETTINGS` | Physical gear / settings button |
 
 These pass through `injectInputEvent` and Xgimi's `PhoneWindowManager` intercept routes them the same way the physical remote does.

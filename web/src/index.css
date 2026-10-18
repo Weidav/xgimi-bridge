@@ -356,58 +356,87 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 
 .modal { position: relative; }
 
-/* Virtual remote — vertical layout matching the Xgimi physical remote, dark + matte. */
+/* Virtual remote — vertical layout matching the Xgimi physical remote (silver aluminum body + curved matte black face). */
 .rc-card { padding-bottom: 22px; }
 .rc-shell {
   margin: 8px auto 0;
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  padding: 18px 16px 22px;
-  background: linear-gradient(180deg, #1c1c1e, #141416);
-  border: 1px solid #2c2c2e;
-  border-radius: 18px;
+  max-width: 286px;
+  padding: 3px 3px 26px;
+  background: linear-gradient(90deg, #8e8e95 0%, #c4c4cc 18%, #dadae2 48%, #b8b8c0 80%, #85858c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 17px 17px 26px 26px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 10px 28px rgba(0, 0, 0, 0.65);
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
 }
 
-/* Generic round button */
+.rc-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 20px 24px;
+  background: linear-gradient(180deg, #1d1d20 0%, #161618 55%, #121214 100%);
+  border: 1px solid #09090b;
+  border-radius: 14px 14px 38px 38px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+/* 3-column grid aligned with the 236px D-pad diameter */
+.rc-row {
+  position: relative;
+  z-index: 3;
+  width: 236px;
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  justify-content: space-between;
+  align-items: center;
+}
+.rc-spacer { width: 52px; height: 52px; pointer-events: none; }
+
+/* Recessed matte circular button matching the physical remote */
 .rc-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--fg);
+  background: radial-gradient(circle at 50% 32%, #28282c 0%, #1c1c1f 70%, #161619 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 0 0 1.5px #0a0a0c,
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+  color: #b8b8be;
   border-radius: 999px;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.08s, transform 0.08s;
+  transition: background 0.08s, transform 0.08s, color 0.08s;
   padding: 0;
 }
-.rc-btn:active {
-  background: rgba(255, 255, 255, 0.14);
-  transform: scale(0.96);
+.rc-btn:hover:not(:disabled) {
+  color: #dcdce2;
 }
-.rc-btn-small { width: 44px; height: 44px; }
-.rc-btn-vol { width: 96px; height: 44px; border-radius: 22px; }
-.rc-btn-assist { background: rgba(255, 255, 255, 0.04); }
+.rc-btn:active:not(:disabled),
+.rc-btn.is-pressed {
+  background: radial-gradient(circle at 50% 50%, #18181b 0%, #121214 100%);
+  color: #fff;
+  transform: scale(0.95);
+}
+.rc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.rc-top-row, .rc-mid-row, .rc-vol-row { display: flex; gap: 12px; }
-
-/* D-pad: 288×288 outer container. Visible 240×240 circle is decorative (a ::before, no
- * pointer events). The four arrow buttons each fill the full container and are clipped to
- * their trapezoidal wedge; the four wedges tile the area outside the OK button exactly,
- * so a tap anywhere in the dpad area goes to the nearest arrow. clip-path participates in
- * hit-testing in modern browsers, so no JS gymnastics. */
+/* D-pad: 284×284 outer hit container with negative vertical margin so the visible 236×236
+ * spun-metal ring sits close to the rows above and below, matching the physical remote. */
 .rc-dpad {
   position: relative;
-  width: 288px;
-  height: 288px;
+  width: 284px;
+  height: 284px;
+  margin: -26px 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -415,12 +444,32 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .rc-dpad::before {
   content: '';
   position: absolute;
-  width: 240px;
-  height: 240px;
+  width: 236px;
+  height: 236px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, #28282a 0%, #18181a 70%, #0e0e10 100%);
-  border: 1px solid #2c2c2e;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 12px rgba(0,0,0,0.5);
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.022) 0px,
+      rgba(255, 255, 255, 0.022) 1px,
+      rgba(0, 0, 0, 0.06) 1px,
+      rgba(0, 0, 0, 0.06) 2.4px
+    ),
+    conic-gradient(
+      from 35deg at 50% 50%,
+      #1d1d20 0deg,
+      #343439 48deg,
+      #1b1b1e 115deg,
+      #141417 175deg,
+      #323237 228deg,
+      #1c1c1f 295deg,
+      #1d1d20 360deg
+    );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 2px #09090b,
+    inset 0 1px 1px rgba(255, 255, 255, 0.09),
+    0 5px 14px rgba(0, 0, 0, 0.6);
   pointer-events: none;
 }
 .rc-dpad button {
@@ -438,23 +487,13 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .rc-dpad-down,
 .rc-dpad-left,
 .rc-dpad-right { inset: 0; }
-/* Trapezoidal tap zones. Vertices in % of the 288×288 container — 33.3% / 66.7% align with
- * the 96×96 OK button at the centre. Adjacent zones share their diagonal edge; the four
- * shapes tile the box exactly minus the OK square. */
 /* Each arrow's tap zone is a full triangle from the container's outer edge to the centre.
  * Triangles overlap the OK button area at their apex, but OK has z-index:2 so it covers
- * the apex visually — the user only sees the triangle from the OK circle outwards.
- * Adjacent triangles share their diagonal edges, so the four together tile the box. */
+ * the apex visually — the user only sees the triangle from the OK circle outwards. */
 .rc-dpad-up    { clip-path: polygon(0 0, 100% 0, 50% 50%); }
 .rc-dpad-down  { clip-path: polygon(0 100%, 100% 100%, 50% 50%); }
 .rc-dpad-left  { clip-path: polygon(0 0, 0 100%, 50% 50%); }
 .rc-dpad-right { clip-path: polygon(100% 0, 100% 100%, 50% 50%); }
-/* Pressed-wedge feedback. Each arrow button's ::before is a 240×240 circle (matches the
- * visible ring exactly), centered inside the 288 container. The button's trapezoid
- * clip-path also cuts the ::before, so what we see is the *intersection* of "circle" and
- * "this button's wedge" — a quarter-of-a-circle slice. Inset shadow gives a 3D "pushed in"
- * look. JS-managed .is-pressed instead of :active because Mobile Safari skips :active when
- * touchstart calls preventDefault. */
 /* Press fill: a circle the size of the visible ring; the parent button's triangle
  * clip-path slices it to a pie sector, and the OK button (on top, z-index:2) covers the
  * pointy apex — so the user sees a clean annular sector with rounded inner+outer edges. */
@@ -466,8 +505,8 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
   position: absolute;
   inset: 24px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.32);
-  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6);
   opacity: 0;
   transition: opacity 0.08s ease-out;
   pointer-events: none;
@@ -477,24 +516,42 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .rc-dpad-left.is-pressed::before,
 .rc-dpad-right.is-pressed::before { opacity: 1; }
 
-/* OK centre button — 33.3% × 33.3% positioned at 33.3%/33.3% so its edges meet the
- * apexes of all four wedges. z-index puts it above the wedges for taps. */
+/* Bare spun-metal centre button matching the physical remote's recessed OK disc. */
 .rc-dpad-center {
-  width: 33.3%;
-  height: 33.3%;
-  top: 33.3%;
-  left: 33.3%;
+  width: 35.2%;
+  height: 35.2%;
+  top: 32.4%;
+  left: 32.4%;
   border-radius: 50%;
   z-index: 2;
-  background: radial-gradient(circle at 50% 30%, #3a3a3c 0%, #1c1c1e 100%) !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--fg);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.6);
+  background:
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      rgba(0, 0, 0, 0.06) 1px,
+      rgba(0, 0, 0, 0.06) 2.2px
+    ),
+    conic-gradient(
+      from 35deg at 50% 50%,
+      #1c1c1f 0deg,
+      #313136 48deg,
+      #19191c 115deg,
+      #131316 175deg,
+      #2f2f34 228deg,
+      #1a1a1d 295deg,
+      #1c1c1f 360deg
+    ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow:
+    0 0 0 2px #09090b,
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 2px 6px rgba(0, 0, 0, 0.65);
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
 }
-.rc-dpad-center:active {
-  background: radial-gradient(circle at 50% 30%, #4a4a4c 0%, #2a2a2c 100%) !important;
+.rc-dpad-center:active,
+.rc-dpad-center.is-pressed {
+  filter: brightness(0.84);
   transform: scale(0.96);
 }
+

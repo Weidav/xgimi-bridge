@@ -14,8 +14,6 @@ const PICTURE_ITEMS = [
   { key: "hue",        ep: "hue",        label: "Hue",        accent: "#f5f5f7" },
 ];
 
-const PICTURE_MODES = { 1: "Movie", 9: "Football", 6: "Office", 4: "Game", 3: "User" };
-
 const PICTURE_MODE_OPTIONS = [
   { value: 1, label: "Movie" },
   { value: 9, label: "Football" },
@@ -53,14 +51,12 @@ async function api(path, opts = {}) {
 function sourceTitle(picture, inputs) {
   if (!picture) return "";
   const src = picture.currentInputSource;
-  let label;
-  if (src === "E_INPUT_SOURCE_STORAGE") label = "Android TV";
-  else if (typeof src === "string" && src.startsWith("E_INPUT_SOURCE_HDMI")) {
+  if (src === "E_INPUT_SOURCE_STORAGE") return "Android TV";
+  if (typeof src === "string" && src.startsWith("E_INPUT_SOURCE_HDMI")) {
     const port = Number(src.replace("E_INPUT_SOURCE_HDMI", ""));
-    label = inputLabelForPort(inputs, port, `HDMI ${port}`);
-  } else label = src || "";
-  const mode = PICTURE_MODES[picture.pictureMode];
-  return mode ? `${label} (${mode})` : label;
+    return inputLabelForPort(inputs, port, `HDMI ${port}`);
+  }
+  return src || "";
 }
 
 function PinIcon() {
@@ -111,7 +107,7 @@ function rrr(n) { return Math.round(80 + (n / 100) * 175); }
 // FOCUS = 140 (KEYCODE_F10) triggers XgimiGlobalKeyBroadcast.gotoAF on Android 14.
 const KEY = {
   DPAD_UP: 19, DPAD_DOWN: 20, DPAD_LEFT: 21, DPAD_RIGHT: 22, DPAD_CENTER: 23,
-  BACK: 4, HOME: 3, MENU: 82,
+  BACK: 4, HOME: 3,
   VOLUME_UP: 24, VOLUME_DOWN: 25, VOLUME_MUTE: 164,
   SETTINGS: 176, ASSIST: 219, FOCUS: 140,
 };
@@ -488,14 +484,16 @@ export default function App() {
               {connected && busy && " · sending"}
             </p>
           </div>
-          <div className="hdr-actions">
-            <button className="hdr-btn hdr-src" onClick={() => setSourceOpen(true)} aria-label="Choose source" disabled={busy}>
-              <SourceIcon />
-            </button>
-            <button className="hdr-btn hdr-power" onClick={() => setPowerOpen(true)} aria-label="Power" disabled={busy}>
-              <PowerIcon />
-            </button>
-          </div>
+          {!adbAuthorized && (
+            <div className="hdr-actions">
+              <button className="hdr-btn hdr-src" onClick={() => setSourceOpen(true)} aria-label="Choose source" disabled={busy}>
+                <SourceIcon />
+              </button>
+              <button className="hdr-btn hdr-power" onClick={() => setPowerOpen(true)} aria-label="Power" disabled={busy}>
+                <PowerIcon />
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -508,7 +506,13 @@ export default function App() {
       )}
 
       {adbAuthorized ? (
-        <RemoteCard sendKey={sendKey} onSendText={sendText} />
+        <RemoteCard
+          sendKey={sendKey}
+          onSendText={sendText}
+          onOpenPower={() => setPowerOpen(true)}
+          onOpenSource={() => setSourceOpen(true)}
+          busy={busy}
+        />
       ) : (
         <section className="card adb-card">
           <h2>Remote needs access</h2>
@@ -683,13 +687,13 @@ function PowerSheet({ busy, onAction, onClose }) {
 }
 
 function SourceIcon() {
+  // Rounded rectangle open on the left edge with a right-pointing arrow entering it,
+  // matching the input-source glyph on the physical Xgimi remote.
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="12" rx="2" />
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-      <path d="M9 11l3-3 3 3" />
-      <path d="M12 8v6" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 7.5V6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-1.5" />
+      <line x1="4" y1="12" x2="14.5" y2="12" />
+      <polyline points="11 8.5 14.5 12 11 15.5" />
     </svg>
   );
 }
@@ -777,51 +781,80 @@ function HoldButton({ keyCode, sendKey, repeat = true, className = "rc-btn", chi
   );
 }
 
-function RemoteCard({ sendKey, onSendText }) {
+function RemoteCard({ sendKey, onSendText, onOpenPower, onOpenSource, busy }) {
   return (
     <section className="card rc-card">
       <h2>Remote</h2>
       <div className="rc-shell">
-        {/* Top row: settings + assistant + autofocus + keyboard */}
-        <div className="rc-top-row">
-          <HoldButton keyCode={KEY.SETTINGS} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Settings">
-            <SettingsIcon />
-          </HoldButton>
-          <button className="rc-btn rc-btn-small" onClick={onSendText} aria-label="Send text">
-            <KeyboardIcon />
-          </button>
-          <HoldButton keyCode={KEY.ASSIST} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small rc-btn-assist" ariaLabel="Assistant">
-            <AssistantDots />
-          </HoldButton>
-          <HoldButton keyCode={KEY.FOCUS} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Auto-focus">
-            <FocusIcon />
-          </HoldButton>
-        </div>
+        <div className="rc-face">
+          {/* Top row: Power (left) + Google Assistant (right) */}
+          <div className="rc-row rc-power-row">
+            <button className="rc-btn rc-btn-power" onClick={onOpenPower} disabled={busy} aria-label="Power">
+              <PowerDotIcon />
+            </button>
+            <span className="rc-spacer" aria-hidden="true" />
+            <HoldButton keyCode={KEY.ASSIST} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-assist" ariaLabel="Assistant">
+              <AssistantMicIcon />
+            </HoldButton>
+          </div>
 
-        {/* D-pad ring — bare circle, no chevrons. Each wedge shows a "pressed" fill on tap. */}
-        <div className="rc-dpad">
-          <HoldButton keyCode={KEY.DPAD_UP}     sendKey={sendKey} className="rc-dpad-up"     ariaLabel="Up" />
-          <HoldButton keyCode={KEY.DPAD_LEFT}   sendKey={sendKey} className="rc-dpad-left"   ariaLabel="Left" />
-          <HoldButton keyCode={KEY.DPAD_CENTER} sendKey={sendKey} repeat={false} className="rc-dpad-center" ariaLabel="OK">OK</HoldButton>
-          <HoldButton keyCode={KEY.DPAD_RIGHT}  sendKey={sendKey} className="rc-dpad-right"  ariaLabel="Right" />
-          <HoldButton keyCode={KEY.DPAD_DOWN}   sendKey={sendKey} className="rc-dpad-down"   ariaLabel="Down" />
-        </div>
+          {/* Row above D-pad: Auto-focus (left) + Keyboard (center) + Source (right) */}
+          <div className="rc-row rc-top-row">
+            <HoldButton keyCode={KEY.FOCUS} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Auto-focus">
+              <FocusIcon />
+            </HoldButton>
+            <button className="rc-btn" onClick={onSendText} disabled={busy} aria-label="Send text">
+              <KeyboardIcon />
+            </button>
+            <button className="rc-btn" onClick={onOpenSource} disabled={busy} aria-label="Choose source">
+              <SourceIcon />
+            </button>
+          </div>
 
-        {/* Back / Menu / Home */}
-        <div className="rc-mid-row">
-          <HoldButton keyCode={KEY.BACK} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Back"><BackIcon /></HoldButton>
-          <HoldButton keyCode={KEY.MENU} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Menu"><MenuIcon /></HoldButton>
-          <HoldButton keyCode={KEY.HOME} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Home"><HomeIcon /></HoldButton>
-        </div>
+          {/* D-pad ring — bare spun-metal circle with bare concave center OK button */}
+          <div className="rc-dpad">
+            <HoldButton keyCode={KEY.DPAD_UP}     sendKey={sendKey} className="rc-dpad-up"     ariaLabel="Up" />
+            <HoldButton keyCode={KEY.DPAD_LEFT}   sendKey={sendKey} className="rc-dpad-left"   ariaLabel="Left" />
+            <HoldButton keyCode={KEY.DPAD_CENTER} sendKey={sendKey} repeat={false} className="rc-dpad-center" ariaLabel="OK" />
+            <HoldButton keyCode={KEY.DPAD_RIGHT}  sendKey={sendKey} className="rc-dpad-right"  ariaLabel="Right" />
+            <HoldButton keyCode={KEY.DPAD_DOWN}   sendKey={sendKey} className="rc-dpad-down"   ariaLabel="Down" />
+          </div>
 
-        {/* Volume rocker + mute */}
-        <div className="rc-vol-row">
-          <HoldButton keyCode={KEY.VOLUME_DOWN} sendKey={sendKey} className="rc-btn rc-btn-vol" ariaLabel="Volume down"><MinusIcon /></HoldButton>
-          <HoldButton keyCode={KEY.VOLUME_MUTE} sendKey={sendKey} repeat={false} className="rc-btn rc-btn-small" ariaLabel="Mute"><MuteIcon /></HoldButton>
-          <HoldButton keyCode={KEY.VOLUME_UP}   sendKey={sendKey} className="rc-btn rc-btn-vol" ariaLabel="Volume up"><PlusIcon /></HoldButton>
+          {/* Row below D-pad: Back (left) + Settings (center) + Home (right) */}
+          <div className="rc-row rc-mid-row">
+            <HoldButton keyCode={KEY.BACK}     sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Back"><BackIcon /></HoldButton>
+            <HoldButton keyCode={KEY.SETTINGS} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Settings"><SettingsIcon /></HoldButton>
+            <HoldButton keyCode={KEY.HOME}     sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Home"><HomeIcon /></HoldButton>
+          </div>
+
+          {/* Bottom row: Volume down (left) + Mute (center) + Volume up (right) */}
+          <div className="rc-row rc-vol-row">
+            <HoldButton keyCode={KEY.VOLUME_DOWN} sendKey={sendKey} className="rc-btn" ariaLabel="Volume down"><MinusIcon /></HoldButton>
+            <HoldButton keyCode={KEY.VOLUME_MUTE} sendKey={sendKey} repeat={false} className="rc-btn" ariaLabel="Mute"><MuteIcon /></HoldButton>
+            <HoldButton keyCode={KEY.VOLUME_UP}   sendKey={sendKey} className="rc-btn" ariaLabel="Volume up"><PlusIcon /></HoldButton>
+          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function PowerDotIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.6" fill="#d94038" />
+    </svg>
+  );
+}
+
+function AssistantMicIcon() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="#4285f4" />
+      <path d="M5.5 10.5a6.5 6.5 0 0 0 1.9 4.6" stroke="#ea4335" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M7.4 15.1A6.5 6.5 0 0 0 18.5 10.5" stroke="#fbbc05" strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="12" y1="17" x2="12" y2="21" stroke="#34a853" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -842,49 +875,54 @@ function KeyboardIcon() {
 
 function SettingsIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   );
 }
+
 function FocusIcon() {
   // Viewfinder: four L-shaped corner brackets with a center crosshair, matching the
   // autofocus glyph on the physical Xgimi remote.
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 8 V4 H8" />
-      <path d="M16 4 H20 V8" />
-      <path d="M20 16 V20 H16" />
-      <path d="M8 20 H4 V16" />
-      <line x1="12" y1="10" x2="12" y2="14" />
-      <line x1="10" y1="12" x2="14" y2="12" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 9V5h4" />
+      <path d="M15 5h4v4" />
+      <path d="M19 15v4h-4" />
+      <path d="M9 19H5v-4" />
+      <line x1="12" y1="9.5" x2="12" y2="14.5" />
+      <line x1="9.5" y1="12" x2="14.5" y2="12" />
     </svg>
   );
 }
 
-function AssistantDots() {
+function BackIcon() {
+  // Straight left arrow matching the physical Xgimi remote's Back glyph.
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="6" cy="12" r="3" fill="#0a84ff" />
-      <circle cx="18" cy="12" r="3" fill="#30d158" />
-      <circle cx="12" cy="6" r="3" fill="#ff453a" />
-      <circle cx="12" cy="18" r="3" fill="#ffd60a" />
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="11.5 5.5 5 12 11.5 18.5" />
     </svg>
   );
 }
-function BackIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>;
-}
-function MenuIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>;
-}
+
 function HomeIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>;
+  // Solid pentagon house silhouette with the upper-left roof cutout matching the physical remote.
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 4.2L4.2 10.7a1 1 0 0 0-.36.77V19a1.5 1.5 0 0 0 1.5 1.5h13.32A1.5 1.5 0 0 0 20.16 19v-7.53a1 1 0 0 0-.36-.77L12 4.2zm-1.15 3.95a.75.75 0 0 1 .96 1.15l-4.5 3.75a.75.75 0 1 1-.96-1.15l4.5-3.75z"
+        fillRule="evenodd"
+      />
+    </svg>
+  );
 }
+
 function MuteIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M11 5L6 9H2v6h4l5 4V5z" />
       <line x1="23" y1="9" x2="17" y2="15" />
       <line x1="17" y1="9" x2="23" y2="15" />
@@ -893,10 +931,10 @@ function MuteIcon() {
 }
 
 function MinusIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/></svg>;
 }
 function PlusIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>;
 }
 
 
