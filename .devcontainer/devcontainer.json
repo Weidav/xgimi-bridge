@@ -13,6 +13,18 @@
         "source=android-adb-keys,target=/home/vscode/.android,type=volume",
         "source=antigravity-state,target=/home/vscode/.gemini,type=volume"
     ],
+    "containerEnv": {
+        "UV_CACHE_DIR": "${containerWorkspaceFolder}/.uv/cache",
+        "UV_TOOL_DIR": "${containerWorkspaceFolder}/.uv/tools"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/python:1": {
+            "version": "3.14"
+        },
+        "ghcr.io/devcontainer-community/devcontainer-features/astral.sh-uv:1": {
+            "shellautocompletion": true
+        }
+    },
     "postCreateCommand": "sudo chown -R vscode:vscode \"$HOME/.android\" \"$HOME/.gemini\" && curl -fsSL https://antigravity.google/cli/install.sh | bash",
     "remoteEnv": {
         "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
