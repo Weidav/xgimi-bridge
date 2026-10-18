@@ -142,6 +142,19 @@ public class LocalAdbClient {
         }
     }
 
+    /** Query hardware / GMPF / CEC info from the shell-uid KeyDispatcher (~10-30 ms). */
+    public String queryHardwareInfo() throws Exception {
+        synchronized (dispatcherLock) {
+            try {
+                return queryHardwareInfoOnce();
+            } catch (Exception first) {
+                Log.w(TAG, "Dispatcher INFO fault (" + first.getMessage() + "), respawning");
+                closeDispatcher();
+                return queryHardwareInfoOnce();
+            }
+        }
+    }
+
     /** Triggers the on-screen Allow prompt if needed; otherwise just verifies auth. */
     public String authorize() throws Exception {
         synchronized (keyLock) { ensureKey(); }
@@ -226,6 +239,21 @@ public class LocalAdbClient {
         throw new Exception("dispatcher response timeout (no matching '" + expected + "')");
     }
 
+    private String queryHardwareInfoOnce() throws Exception {
+        ensureDispatcher();
+        byte[] payload = "INFO\n".getBytes("UTF-8");
+        writePacket(dispOut, A_WRTE, dispLocalId, dispRemoteId, payload);
+        String prefix = "OK INFO ";
+        long deadline = System.currentTimeMillis() + 8_000;
+        while (System.currentTimeMillis() < deadline) {
+            String line = readDispatcherLine();
+            if (line.startsWith(prefix)) return line.substring(prefix.length());
+            if (line.startsWith("ERR ")) throw new Exception("dispatcher error: " + line);
+            Log.w(TAG, "Discarding stale dispatcher response '" + line + "' (expected 'OK INFO ...')");
+        }
+        throw new Exception("dispatcher response timeout (no matching 'OK INFO ...')");
+    }
+
     private void ensureDispatcher() throws Exception {
         if (dispSock != null && !dispSock.isClosed() && dispLocalId > 0) return;
 
@@ -239,9 +267,9 @@ public class LocalAdbClient {
             handshake(in, out);
             s.setSoTimeout(10_000);
 
-            // Run our KeyDispatcher class via app_process with this APK on the classpath.
+            // Run our KeyDispatcher class via app_process with com.xgimi.api.jar + this APK on the classpath.
             String apkPath = ctx.getPackageCodePath();
-            String cmd = "pkill -f '^app_process.*com.xgimi.bridge.KeyDispatcher' 2>/dev/null; CLASSPATH=" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
+            String cmd = "pkill -f '^app_process.*com.xgimi.bridge.KeyDispatcher' 2>/dev/null; CLASSPATH=/system_ext/framework/com.xgimi.api.jar:" + apkPath + " exec app_process / com.xgimi.bridge.KeyDispatcher";
 
             int localId = 1;
             byte[] dest = ("shell:" + cmd + "\0").getBytes("UTF-8");

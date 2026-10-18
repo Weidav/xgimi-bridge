@@ -132,6 +132,10 @@ public class HttpServer extends NanoHTTPD {
             }
             return json(Response.Status.OK, new JSONObject(snap).toString());
         }
+        if (uri.equals("/api/info") && m == Method.GET) {
+            JSONObject info = ProjectorInfoCollector.collectAll(ctx, aidl, adb);
+            return json(Response.Status.OK, info.toString());
+        }
 
         if (m == Method.POST && uri.startsWith("/api/picture/")) return handlePictureSet(session, uri);
         if (m == Method.POST && uri.startsWith("/api/input")) return handleInputSwitch(session, uri);

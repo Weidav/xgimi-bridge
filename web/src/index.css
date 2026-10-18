@@ -555,3 +555,416 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
   transform: scale(0.96);
 }
 
+/* Info button in Display settings */
+.sub-card-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+.sub-card-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.sub-card-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+.sub-card-btn-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.sub-card-btn-left svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.sub-card-btn-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Stats for nerds / Projector Info Sheet */
+.info-backdrop {
+  padding: 12px;
+  align-items: flex-end;
+}
+@media (min-width: 560px) {
+  .info-backdrop {
+    align-items: center;
+    padding: 24px;
+  }
+}
+.info-sheet {
+  background: #161618;
+  border: 1px solid #2c2c2e;
+  border-radius: 14px;
+  max-width: 540px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
+  color: var(--fg);
+  overflow: hidden;
+}
+.info-hdr {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(28, 28, 30, 0.9);
+}
+.info-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.info-subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.info-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.info-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.info-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(235, 235, 245, 0.35);
+}
+.info-pill-live {
+  background: rgba(50, 215, 75, 0.14);
+  border-color: rgba(50, 215, 75, 0.45);
+  color: #32d74b;
+}
+.info-pill-live .info-live-dot {
+  background: #32d74b;
+  box-shadow: 0 0 6px #32d74b;
+}
+
+.info-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  -webkit-overflow-scrolling: touch;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.info-err {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: rgba(255, 69, 58, 0.12);
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+/* Quick Summary Grid */
+.info-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.info-tile {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.info-tile-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.info-tile-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.info-tile-sub {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Filter Search Input */
+.info-search-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+.info-search {
+  width: 100%;
+  background: #0e0e10;
+  border: 1px solid #2c2c2e;
+  border-radius: 8px;
+  padding: 9px 32px 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+  outline: none;
+}
+.info-search:focus {
+  border-color: var(--accent);
+}
+.info-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 18px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+}
+
+/* Submenu Cards inside InfoSheet */
+.info-sub-card > summary {
+  padding: 11px 13px;
+}
+.info-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.info-section-content {
+  margin: 0 13px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* Key-Value Telemetry List */
+.info-kv-list {
+  display: flex;
+  flex-direction: column;
+}
+.info-kv-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  font-size: 13px;
+}
+.info-kv-row:last-child {
+  border-bottom: none;
+}
+.info-kv-label {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.info-kv-val {
+  color: var(--fg);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  text-align: right;
+  word-break: break-word;
+}
+
+/* RGB Laser/LED Drive Bars */
+.info-rgb-bars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+.info-rgb-hdr {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.info-rgb-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.info-rgb-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+/* Sensor & Fan Chips */
+.info-chip-group {
+  margin-bottom: 10px;
+}
+.info-chip-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.info-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
+}
+.info-chip {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 7px;
+  padding: 6px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+}
+.info-chip-warn {
+  border-color: rgba(255, 69, 58, 0.5);
+  background: rgba(255, 69, 58, 0.1);
+}
+.info-chip-name {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.info-chip-val {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 600;
+  color: var(--fg);
+  flex: 0 0 auto;
+}
+
+/* CEC Topology Cards */
+.info-cec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.info-cec-card {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.info-cec-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.info-cec-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.info-cec-pwr {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+}
+.info-cec-pwr.is-on {
+  background: rgba(50, 215, 75, 0.15);
+  color: #32d74b;
+}
+.info-cec-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Raw JSON Viewer */
+.info-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.info-raw-pre {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  background: #0b0b0d;
+  border: 1px solid #242428;
+  border-radius: 8px;
+  padding: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  color: #d1d1d6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.info-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: rgba(28, 28, 30, 0.9);
+  display: flex;
+  justify-content: flex-end;
+}
+
+
