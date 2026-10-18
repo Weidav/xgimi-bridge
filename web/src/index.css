@@ -27,83 +27,10 @@ body {
 .screen {
   max-width: 540px;
   margin: 0 auto;
-  padding: max(env(safe-area-inset-top), 24px) 16px max(env(safe-area-inset-bottom), 24px);
+  padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
 }
 
-.hdr {
-  margin-bottom: 20px;
-}
-.hdr-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.hdr h1 {
-  font-size: clamp(24px, 6vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0;
-  line-height: 1.2;
-}
-.hdr-source-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--fg);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, transform 0.08s;
-  user-select: none;
-  -webkit-user-select: none;
-  white-space: nowrap;
-  max-width: 200px;
-}
-.hdr-source-badge:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.22);
-}
-.hdr-source-badge:active:not(:disabled) {
-  transform: scale(0.96);
-}
-.hdr-source-badge:disabled {
-  cursor: default;
-}
-.hdr-source-badge.is-offline {
-  color: var(--danger);
-  border-color: rgba(255, 69, 58, 0.35);
-  background: rgba(255, 69, 58, 0.08);
-}
-.hdr-source-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #30d158;
-  box-shadow: 0 0 6px rgba(48, 209, 88, 0.6);
-  flex-shrink: 0;
-}
-.hdr-source-dot.is-offline {
-  background: var(--danger);
-  box-shadow: 0 0 6px rgba(255, 69, 58, 0.6);
-}
-.hdr-source-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.hdr-source-busy {
-  color: var(--muted);
-  font-size: 11px;
-}
+
 
 .card {
   background: var(--panel);
@@ -345,38 +272,7 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 }
 .modal-btn-danger:hover { background: #d63b32; border-color: #d63b32; }
 
-/* Header layout with the right-side action buttons (SRC + PWR, like classical remotes). */
-.hdr-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hdr-actions { display: flex; gap: 8px; flex: 0 0 auto; }
-.hdr-btn {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--fg);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.hdr-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-.hdr-btn:active:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
-.hdr-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.hdr-power {
-  background: rgba(255, 69, 58, 0.1);
-  color: var(--danger);
-  border-color: rgba(255, 69, 58, 0.35);
-}
-.hdr-power:hover:not(:disabled) {
-  background: rgba(255, 69, 58, 0.18);
-  border-color: rgba(255, 69, 58, 0.6);
-}
-.hdr-power:active:not(:disabled) { background: rgba(255, 69, 58, 0.28); }
+
 
 /* Power / Source sheets — share the modal backdrop. */
 .power-sheet, .source-sheet {
@@ -422,7 +318,7 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
 .rc-wrap {
   display: flex;
   justify-content: center;
-  margin: 4px 0 24px;
+  margin: 0 0 20px;
 }
 .rc-shell {
   margin: 0 auto;
@@ -445,14 +341,125 @@ ul.presets { list-style: none; padding: 0; margin: 0 0 12px; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
-  padding: 20px 20px 24px;
+  gap: 16px;
+  padding: 16px 20px 24px;
   background: linear-gradient(180deg, #1d1d20 0%, #161618 55%, #121214 100%);
   border: 1px solid #09090b;
   border-radius: 14px 14px 38px 38px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 2px 5px rgba(0, 0, 0, 0.7);
+}
+
+/* Virtual OLED display embedded in the remote face */
+.rc-display {
+  position: relative;
+  width: 236px;
+  height: 38px;
+  padding: 2px;
+  background: linear-gradient(180deg, #2c2d32 0%, #17181b 50%, #0d0e10 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px #08080a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+  font: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  margin: 0;
+}
+.rc-display:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 0 0 1px #08080a,
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 3px 10px rgba(0, 0, 0, 0.7);
+}
+.rc-display:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.rc-display:disabled {
+  cursor: default;
+}
+.rc-display-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: radial-gradient(ellipse at 50% -20%, #152230 0%, #090d13 60%, #040507 100%);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.85),
+    inset 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  gap: 8px;
+  overflow: hidden;
+}
+.rc-display-screen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 999px 999px 0 0;
+  pointer-events: none;
+}
+.rc-display-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #30d158;
+  box-shadow: 0 0 6px rgba(48, 209, 88, 0.9), 0 0 12px rgba(48, 209, 88, 0.4);
+  flex-shrink: 0;
+}
+.rc-display.is-offline .rc-display-dot {
+  background: #ff453a;
+  box-shadow: 0 0 6px rgba(255, 69, 58, 0.9), 0 0 12px rgba(255, 69, 58, 0.4);
+}
+.rc-display-title {
+  flex: 1;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #e2f0fe;
+  text-shadow: 0 0 8px rgba(120, 190, 255, 0.35);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-display.is-offline .rc-display-title {
+  color: #ff6b62;
+  text-shadow: 0 0 8px rgba(255, 69, 58, 0.35);
+}
+.rc-display-spacer {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+}
+.rc-display-busy {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffd60a;
+  text-shadow: 0 0 6px rgba(255, 214, 10, 0.5);
+  flex-shrink: 0;
+  animation: rc-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes rc-pulse {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
 }
 
 /* 3-column grid aligned with the 236px D-pad diameter */
