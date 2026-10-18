@@ -49,13 +49,17 @@ public class HttpServer extends MiniHttp {
             if (uri.startsWith("/api/")) {
                 r = handleApi(req, uri);
             } else {
-                r = serveAsset(uri);
+                r = serveAsset(req, uri);
             }
         } catch (Throwable t) {
             Log.e(TAG, "handler crash", t);
             r = json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
         }
         return r;
+    }
+
+    private static boolean isGetOrHead(Method m) {
+        return m == Method.GET || m == Method.HEAD;
     }
 
     private Response handleApi(Request req, String uri) throws IOException {
@@ -76,7 +80,7 @@ public class HttpServer extends MiniHttp {
             }
         }
 
-        if (uri.equals("/api/state") && m == Method.GET) {
+        if (uri.equals("/api/state") && isGetOrHead(m)) {
             JSONObject o = new JSONObject();
             try {
                 o.put("ready", aidl.isReady())
@@ -87,7 +91,7 @@ public class HttpServer extends MiniHttp {
             } catch (JSONException e) {}
             return json(Response.Status.OK, o.toString());
         }
-        if (uri.equals("/api/inputs") && m == Method.GET) {
+        if (uri.equals("/api/inputs") && isGetOrHead(m)) {
             try {
                 android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
                     ctx.getSystemService(android.content.Context.TV_INPUT_SERVICE);
@@ -125,7 +129,7 @@ public class HttpServer extends MiniHttp {
                 return json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
             }
         }
-        if (uri.equals("/api/picture") && m == Method.GET) {
+        if (uri.equals("/api/picture") && isGetOrHead(m)) {
             java.util.Map<String,Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
             snap.put("runningApp", getRunningApp(ctx));
@@ -135,7 +139,7 @@ public class HttpServer extends MiniHttp {
             }
             return json(Response.Status.OK, new JSONObject(snap).toString());
         }
-        if (uri.equals("/api/info") && m == Method.GET) {
+        if (uri.equals("/api/info") && isGetOrHead(m)) {
             JSONObject info = ProjectorInfoCollector.collectAll(ctx, aidl, adb);
             return json(Response.Status.OK, info.toString());
         }
@@ -162,7 +166,7 @@ public class HttpServer extends MiniHttp {
      */
     private Response handleAdb(Request req, String uri, Method m) {
         try {
-            if (uri.equals("/api/adb/status") && m == Method.GET) {
+            if (uri.equals("/api/adb/status") && isGetOrHead(m)) {
                 boolean ok = adb.isAuthorized();
                 return json(Response.Status.OK, "{\"authorized\":" + ok + "}");
             }
@@ -401,7 +405,7 @@ public class HttpServer extends MiniHttp {
         //   POST   /api/presets/{id}/apply         (apply to projector)
         //   DELETE /api/presets/{id}
         try {
-            if (uri.equals("/api/presets") && m == Method.GET) {
+            if (uri.equals("/api/presets") && isGetOrHead(m)) {
                 return json(Response.Status.OK, presets.load().toString());
             }
             if (uri.equals("/api/presets") && m == Method.POST) {
@@ -467,10 +471,13 @@ public class HttpServer extends MiniHttp {
         try { return new JSONObject().put("error", msg == null ? "" : msg).toString(); } catch (JSONException e) { return "{\"error\":\"\"}"; }
     }
 
-    private Response serveAsset(String uri) {
+    private Response serveAsset(Request req, String uri) {
+        if (!isGetOrHead(req.method)) {
+            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "text/plain", "Method not allowed");
+        }
         String path = uri.equals("/") ? "/index.html" : uri;
         if (path.startsWith("/")) path = path.substring(1);
-        if (path.contains("..") || path.contains("//")) {
+        if (path.contains("..") || path.contains("//") || path.indexOf('\0') >= 0) {
             return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found");
         }
         String assetPath = "web/" + path;

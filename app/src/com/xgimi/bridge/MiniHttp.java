@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -51,6 +52,7 @@ public abstract class MiniHttp {
             METHOD_NOT_ALLOWED(405, "Method Not Allowed"),
             PAYLOAD_TOO_LARGE(413, "Payload Too Large"),
             INTERNAL_ERROR(500, "Internal Server Error"),
+            NOT_IMPLEMENTED(501, "Not Implemented"),
             SERVICE_UNAVAILABLE(503, "Service Unavailable");
 
             public final int code;
@@ -73,7 +75,7 @@ public abstract class MiniHttp {
         public final Status status;
         public final String contentType;
         public final byte[] body;
-        public final Map<String, String> headers = new HashMap<>();
+        public final Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
         public Response(Status status, String contentType, byte[] body) {
             this.status = status;
@@ -105,14 +107,22 @@ public abstract class MiniHttp {
     public static final class Request {
         public final Method method;
         public final String uri;
+        public final String query;
+        public final Map<String, String> parms;
         public final Map<String, String> headers;
         public final byte[] body;
 
-        public Request(Method method, String uri, Map<String, String> headers, byte[] body) {
+        public Request(Method method, String uri, String query, Map<String, String> parms, Map<String, String> headers, byte[] body) {
             this.method = method;
             this.uri = uri;
-            this.headers = headers;
+            this.query = query;
+            this.parms = parms != null ? parms : Collections.<String, String>emptyMap();
+            this.headers = headers != null ? headers : Collections.<String, String>emptyMap();
             this.body = body != null ? body : new byte[0];
+        }
+
+        public Request(Method method, String uri, Map<String, String> headers, byte[] body) {
+            this(method, uri, null, Collections.<String, String>emptyMap(), headers, body);
         }
 
         public Method getMethod() {
@@ -121,6 +131,14 @@ public abstract class MiniHttp {
 
         public String getUri() {
             return uri;
+        }
+
+        public String getQuery() {
+            return query;
+        }
+
+        public Map<String, String> getParms() {
+            return parms;
         }
 
         public Map<String, String> getHeaders() {
@@ -268,8 +286,13 @@ public abstract class MiniHttp {
                     // Clean EOF from client
                     break;
                 }
-                // Skip empty lines before request-line per RFC 7230 §3.5
+                // Skip empty lines before request-line per RFC 7230 §3.5 (limit to 32)
+                int emptyCount = 0;
                 while (requestLine.isEmpty()) {
+                    if (++emptyCount > 32) {
+                        sendError(out, Response.Status.BAD_REQUEST, "Too many empty lines");
+                        break;
+                    }
                     try {
                         requestLine = readLine(in, lineBuf, 4096);
                     } catch (SocketTimeoutException te) {
@@ -306,6 +329,10 @@ public abstract class MiniHttp {
                 } catch (IllegalArgumentException e) {
                     method = Method.UNKNOWN;
                 }
+                if (method == Method.UNKNOWN) {
+                    sendError(out, Response.Status.NOT_IMPLEMENTED, "Unsupported HTTP method: " + methodStr);
+                    break;
+                }
 
                 // Strip authority if absolute URI (e.g. http://host:port/path)
                 if (rawUri.startsWith("http://") || rawUri.startsWith("https://")) {
@@ -321,6 +348,8 @@ public abstract class MiniHttp {
                 // Strip query string
                 int queryIdx = rawUri.indexOf('?');
                 String pathOnly = queryIdx >= 0 ? rawUri.substring(0, queryIdx) : rawUri;
+                String query = queryIdx >= 0 ? rawUri.substring(queryIdx + 1) : null;
+                Map<String, String> parms = parseQueryParameters(query);
 
                 // URL decode preserving '+' as literal
                 String decodedUri;
@@ -333,8 +362,8 @@ public abstract class MiniHttp {
                     decodedUri = "/" + decodedUri;
                 }
 
-                // Read headers
-                Map<String, String> headers = new HashMap<>();
+                // Read headers (case-insensitive)
+                Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
                 int totalHeaderBytes = requestLine.length();
                 boolean headerError = false;
                 String headerErrorMsg = "Error reading request headers";
@@ -372,7 +401,7 @@ public abstract class MiniHttp {
                         sendError(out, Response.Status.BAD_REQUEST, "Whitespace before colon in header name");
                         return;
                     }
-                    String k = headerLine.substring(0, colon).trim().toLowerCase(Locale.US);
+                    String k = headerLine.substring(0, colon).trim();
                     String v = headerLine.substring(colon + 1).trim();
                     headers.put(k, v);
                 }
@@ -392,45 +421,140 @@ public abstract class MiniHttp {
 
                 // Check transfer encoding
                 String te = headers.get("transfer-encoding");
+                boolean isChunked = false;
                 if (te != null && !te.trim().isEmpty()) {
-                    sendError(out, Response.Status.BAD_REQUEST, "Transfer-Encoding not supported");
-                    break;
+                    if ("chunked".equalsIgnoreCase(te.trim())) {
+                        isChunked = true;
+                    } else {
+                        sendError(out, Response.Status.NOT_IMPLEMENTED, "Unsupported Transfer-Encoding: " + te);
+                        break;
+                    }
                 }
 
                 // Read body
-                String clStr = headers.get("content-length");
-                int contentLength = 0;
-                if (clStr != null) {
-                    try {
-                        contentLength = Integer.parseInt(clStr.trim());
-                    } catch (NumberFormatException e) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Invalid Content-Length");
-                        break;
-                    }
-                    if (contentLength < 0) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Negative Content-Length");
-                        break;
-                    }
-                    if (contentLength > 65536) {
-                        sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "Payload too large (> 64KB)");
-                        break;
-                    }
-                }
-
-                byte[] body = new byte[contentLength];
-                if (contentLength > 0) {
-                    int totalRead = 0;
-                    while (totalRead < contentLength) {
-                        int read = in.read(body, totalRead, contentLength - totalRead);
-                        if (read < 0) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in request body");
-                            return;
+                byte[] body;
+                if (isChunked) {
+                    ByteArrayOutputStream bodyBuf = new ByteArrayOutputStream();
+                    int totalChunkBytes = 0;
+                    boolean chunkError = false;
+                    while (true) {
+                        String hexLine;
+                        try {
+                            hexLine = readLine(in, lineBuf, 128);
+                        } catch (SocketTimeoutException ste) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Timeout reading chunk size");
+                            chunkError = true;
+                            break;
+                        } catch (IOException ie) {
+                            sendError(out, Response.Status.BAD_REQUEST, ie.getMessage());
+                            chunkError = true;
+                            break;
                         }
-                        totalRead += read;
+                        if (hexLine == null) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in chunked body");
+                            chunkError = true;
+                            break;
+                        }
+                        hexLine = hexLine.trim();
+                        int semi = hexLine.indexOf(';');
+                        if (semi >= 0) hexLine = hexLine.substring(0, semi).trim();
+                        int chunkSize;
+                        try {
+                            chunkSize = Integer.parseInt(hexLine, 16);
+                        } catch (NumberFormatException e) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Invalid chunk size: " + hexLine);
+                            chunkError = true;
+                            break;
+                        }
+                        if (chunkSize < 0) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Negative chunk size");
+                            chunkError = true;
+                            break;
+                        }
+                        if (chunkSize == 0) {
+                            // Read trailing headers until empty line
+                            while (true) {
+                                String trailer;
+                                try {
+                                    trailer = readLine(in, lineBuf, 4096);
+                                } catch (IOException e) {
+                                    trailer = null;
+                                }
+                                if (trailer == null || trailer.isEmpty()) break;
+                            }
+                            break;
+                        }
+                        totalChunkBytes += chunkSize;
+                        if (totalChunkBytes > 65536) {
+                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "Payload too large (> 64KB)");
+                            chunkError = true;
+                            break;
+                        }
+                        byte[] chunk = new byte[chunkSize];
+                        int nRead = 0;
+                        while (nRead < chunkSize) {
+                            int r = in.read(chunk, nRead, chunkSize - nRead);
+                            if (r < 0) {
+                                sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in chunk");
+                                chunkError = true;
+                                break;
+                            }
+                            nRead += r;
+                        }
+                        if (chunkError) break;
+                        bodyBuf.write(chunk, 0, nRead);
+                        // Consume CRLF following chunk data
+                        String crlf;
+                        try {
+                            crlf = readLine(in, lineBuf, 128);
+                        } catch (IOException e) {
+                            crlf = null;
+                        }
+                        if (crlf != null && !crlf.isEmpty()) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Malformed chunk ending");
+                            chunkError = true;
+                            break;
+                        }
+                    }
+                    if (chunkError) {
+                        break;
+                    }
+                    body = bodyBuf.toByteArray();
+                } else {
+                    String clStr = headers.get("content-length");
+                    int contentLength = 0;
+                    if (clStr != null) {
+                        try {
+                            contentLength = Integer.parseInt(clStr.trim());
+                        } catch (NumberFormatException e) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Invalid Content-Length");
+                            break;
+                        }
+                        if (contentLength < 0) {
+                            sendError(out, Response.Status.BAD_REQUEST, "Negative Content-Length");
+                            break;
+                        }
+                        if (contentLength > 65536) {
+                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "Payload too large (> 64KB)");
+                            break;
+                        }
+                    }
+
+                    body = new byte[contentLength];
+                    if (contentLength > 0) {
+                        int totalRead = 0;
+                        while (totalRead < contentLength) {
+                            int read = in.read(body, totalRead, contentLength - totalRead);
+                            if (read < 0) {
+                                sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in request body");
+                                return;
+                            }
+                            totalRead += read;
+                        }
                     }
                 }
 
-                Request req = new Request(method, decodedUri, headers, body);
+                Request req = new Request(method, decodedUri, query, parms, headers, body);
                 Response res;
                 try {
                     res = serve(req);
@@ -523,8 +647,35 @@ public abstract class MiniHttp {
         throw new IOException("Truncated line at EOF");
     }
 
+    private static Map<String, String> parseQueryParameters(String query) {
+        if (query == null || query.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> parms = new HashMap<>();
+        String[] pairs = query.split("&");
+        for (String pair : pairs) {
+            if (pair.isEmpty()) continue;
+            int eq = pair.indexOf('=');
+            String key;
+            String val = "";
+            if (eq >= 0) {
+                key = pair.substring(0, eq);
+                val = pair.substring(eq + 1);
+            } else {
+                key = pair;
+            }
+            try {
+                key = URLDecoder.decode(key.replace("+", "%2B"), "UTF-8");
+                val = URLDecoder.decode(val.replace("+", "%2B"), "UTF-8");
+            } catch (Exception ignored) {}
+            parms.put(key, val);
+        }
+        return parms;
+    }
+
     private void sendOverloadedError(Socket socket) {
         try {
+            socket.setSoTimeout(2000);
             OutputStream out = new BufferedOutputStream(socket.getOutputStream(), 1024);
             sendError(out, Response.Status.SERVICE_UNAVAILABLE, "Server busy");
         } catch (Throwable ignored) {
@@ -580,13 +731,16 @@ public abstract class MiniHttp {
     }
 
     public static Response newFixedLengthResponse(Response.Status status, String mimeType, InputStream is, long totalBytes) {
-        try {
+        if (is == null) {
+            return new Response(status, mimeType, new byte[0]);
+        }
+        try (InputStream in = is) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             long remaining = totalBytes;
             while (remaining > 0) {
                 int toRead = (int) Math.min(buf.length, remaining);
-                int n = is.read(buf, 0, toRead);
+                int n = in.read(buf, 0, toRead);
                 if (n < 0) break;
                 baos.write(buf, 0, n);
                 remaining -= n;
