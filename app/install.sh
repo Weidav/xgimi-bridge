@@ -51,6 +51,7 @@ adb -s "$P" shell "appops set $PKG RUN_ANY_IN_BACKGROUND allow"
 
 # Bridge has no LAUNCHER icon — start the helper activity by explicit component
 # (it schedules the persistent JobScheduler job and starts BridgeService).
+adb -s "$P" shell "pkill -f KeyDispatcher || true"
 adb -s "$P" shell "am force-stop $PKG"
 adb -s "$P" shell "am start -n $PKG/.LauncherActivity"
 sleep 2

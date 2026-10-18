@@ -8,6 +8,8 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Environment;
+import android.os.IBinder;
+import android.os.Parcel;
 import android.os.PowerManager;
 import android.os.StatFs;
 import android.os.SystemClock;
@@ -75,6 +77,16 @@ public class ProjectorInfoCollector {
         JSONObject gPwr = gmpfJson.optJSONObject("power");
         JSONObject gCfg = gmpfJson.optJSONObject("config");
         JSONObject gCec = gmpfJson.optJSONObject("cecDumpsys");
+        JSONObject gMtkPq = gmpfJson.optJSONObject("mtkPq");
+        if (gMtkPq == null) {
+            gMtkPq = queryMtkPqFallback();
+        }
+        JSONObject mtkSettings = gMtkPq != null ? gMtkPq.optJSONObject("settings") : null;
+        int mtkHdrType = gMtkPq != null ? gMtkPq.optInt("hdrType", -1) : -1;
+        String mtkPicMode = mtkSettings != null ? mtkSettings.optString("Picture_Mode", null) : null;
+        String tvSourcesStatus = settingsJson.optString("global.TvSourcesStatus", null);
+        boolean isPlaybackRunning = "1".equals(sysPropsJson.optString("vendor.mtk.playback.running", "0"));
+        String runningApp = nonEmpty(sysPropsJson.optString("sys.mtk.running.application", null), settingsJson.optString("global.running_package_name", null));
 
         // Build categorized submenus + summary
         try {
@@ -85,10 +97,18 @@ public class ProjectorInfoCollector {
             JSONObject catDisplay = new JSONObject();
             String inputSrcRaw = aidlJson.optString("currentInputSource", "");
             int gmpfInputSrc = gTv != null ? gTv.optInt("currentInputSource", -1) : -1;
+            boolean isInternalStorage = "E_INPUT_SOURCE_STORAGE".equals(inputSrcRaw) || gmpfInputSrc == 34 || gmpfInputSrc == 0 || (tvSourcesStatus != null && tvSourcesStatus.startsWith("mm|"));
             String inputLabel = formatInputSource(inputSrcRaw, gmpfInputSrc);
+            if (isInternalStorage && runningApp != null && !runningApp.isEmpty()) {
+                inputLabel = "Android TV (" + runningApp + ")";
+            }
             put(catDisplay, "activeInputSource", inputLabel);
             put(catDisplay, "rawInputSource", inputSrcRaw.isEmpty() ? gmpfInputSrc : inputSrcRaw);
-            put(catDisplay, "runningApp", sysPropsJson.optString("sys.mtk.running.application", null));
+            put(catDisplay, "runningApp", runningApp);
+            put(catDisplay, "mediaCodecPlayback", isPlaybackRunning ? "Active (Decoding)" : "Idle");
+            if (tvSourcesStatus != null && !tvSourcesStatus.isEmpty()) {
+                put(catDisplay, "mediaCodecPipeline", tvSourcesStatus);
+            }
             put(catDisplay, "hdmiPlayingState", "1".equals(sysPropsJson.optString("vendor.xgimi.hdmi.playing.state", "0")) ? "Playing (1)" : "Idle (0)");
 
             JSONObject hdmiInfo = gTv != null ? gTv.optJSONObject("hdmiInfo") : null;
@@ -133,19 +153,35 @@ public class ProjectorInfoCollector {
 
             // HDR / Dolby Vision / IMAX / Filmmaker
             int hdrType = gTv != null ? gTv.optInt("hdrType", 0) : 0;
-            boolean isPlayingHdr = (gDisp != null && gDisp.optBoolean("isPlayingHdrVideo", false)) || hdrType > 0;
+            boolean isPlayingHdr = (gDisp != null && gDisp.optBoolean("isPlayingHdrVideo", false))
+                    || hdrType > 0
+                    || (tvSourcesStatus != null && !tvSourcesStatus.toUpperCase().contains("SDR"));
             boolean hdrSupportEnabled = (gTv != null && gTv.optBoolean("hdrEnable", true))
                     || aidlJson.optBoolean("hdrEnable", true);
-            String hdrLabel = formatHdrType(hdrType, isPlayingHdr, gTv);
+            String hdrLabel = resolveHdrStatus(hdrType, isPlayingHdr, gTv, tvSourcesStatus, mtkHdrType, mtkPicMode, isInternalStorage);
             put(catDisplay, "hdrStatus", hdrLabel);
             put(catDisplay, "hdrSupportEnabled", hdrSupportEnabled);
             put(catDisplay, "hdrSettingMode", settingsJson.optString("global.picture_list_hdr", null));
-            if (gTv != null) {
-                put(catDisplay, "dolbyVisionPicMode", formatDolbyVisionMode(gTv.optInt("dolbyVisionPicMode", -1)));
-                put(catDisplay, "filmmakerModePlaying", gTv.optBoolean("isFFMPlaying", false));
-                put(catDisplay, "hdrVividPlaying", gTv.optBoolean("isHdrVividPlaying", false));
-                put(catDisplay, "imaxEnhancedPlaying", gTv.optBoolean("isImaxVideoPlaying", false));
+
+            String dvPicModeLabel;
+            if (mtkPicMode != null && mtkPicMode.toLowerCase().contains("dolbyvision")) {
+                dvPicModeLabel = formatMtkPictureMode(mtkPicMode);
+            } else if (gTv != null && gTv.has("dolbyVisionPicMode") && gTv.optInt("dolbyVisionPicMode", -1) > 0) {
+                dvPicModeLabel = formatDolbyVisionMode(gTv.optInt("dolbyVisionPicMode"));
+            } else if (hdrLabel.contains("Dolby Vision")) {
+                dvPicModeLabel = "Active";
+            } else {
+                dvPicModeLabel = "Inactive (0)";
             }
+            put(catDisplay, "dolbyVisionPicMode", dvPicModeLabel);
+
+            boolean isFfmPlaying = "FilmMaker".equalsIgnoreCase(mtkPicMode) || (gTv != null && gTv.optBoolean("isFFMPlaying", false));
+            boolean isImaxPlaying = "ImaxEnhanced".equalsIgnoreCase(mtkPicMode) || (gTv != null && gTv.optBoolean("isImaxVideoPlaying", false));
+            boolean isHdrVividPlaying = (tvSourcesStatus != null && tvSourcesStatus.toUpperCase().contains("HDRVIVID"))
+                    || (gTv != null && gTv.optBoolean("isHdrVividPlaying", false));
+            put(catDisplay, "filmmakerModePlaying", isFfmPlaying);
+            put(catDisplay, "hdrVividPlaying", isHdrVividPlaying);
+            put(catDisplay, "imaxEnhancedPlaying", isImaxPlaying);
             put(catDisplay, "supportedHdrFormats", fwDisplay.optString("supportedHdrTypes", null));
             if (fwDisplay.has("hdrMaxLuminance")) {
                 put(catDisplay, "panelHdrLuminanceRange",
@@ -232,16 +268,37 @@ public class ProjectorInfoCollector {
 
             // Picture Mode & PQ sliders
             int picMode = aidlJson.optInt("pictureMode", -1);
-            String picModeLabel = formatPictureMode(picMode);
+            String picModeLabel = resolvePictureMode(picMode, mtkPicMode, isInternalStorage);
             put(catBrightness, "pictureMode", picModeLabel);
-            put(catBrightness, "pqBrightness", aidlJson.opt("brightness"));
-            put(catBrightness, "pqContrast", aidlJson.opt("contrast"));
-            put(catBrightness, "pqSaturation", aidlJson.opt("saturation"));
-            put(catBrightness, "pqSharpness", aidlJson.opt("sharpness"));
-            put(catBrightness, "pqHue", aidlJson.opt("hue"));
 
-            int colorTemp = aidlJson.optInt("colorTemp", -1);
-            put(catBrightness, "colorTemperatureMode", formatColorTemp(colorTemp));
+            if (mtkSettings != null) {
+                put(catBrightness, "pqBrightness", mtkSettings.has("Brightness") ? mtkSettings.opt("Brightness") : aidlJson.opt("brightness"));
+                put(catBrightness, "pqContrast", mtkSettings.has("Contrast") ? mtkSettings.opt("Contrast") : aidlJson.opt("contrast"));
+                put(catBrightness, "pqSaturation", mtkSettings.has("Saturation") ? mtkSettings.opt("Saturation") : aidlJson.opt("saturation"));
+                put(catBrightness, "pqSharpness", mtkSettings.has("SR_Strength") ? mtkSettings.opt("SR_Strength") : aidlJson.opt("sharpness"));
+                put(catBrightness, "pqHue", mtkSettings.has("Hue") ? mtkSettings.opt("Hue") : aidlJson.opt("hue"));
+
+                int colorTemp = aidlJson.optInt("colorTemp", -1);
+                String mtkColorTemp = mtkSettings.optString("Color_Temperature", null);
+                put(catBrightness, "colorTemperatureMode", mtkColorTemp != null ? formatMtkColorTemp(mtkColorTemp) : formatColorTemp(colorTemp));
+
+                if (mtkSettings.has("MJC_Deblur")) put(catBrightness, "memcDeblur", mtkSettings.optInt("MJC_Deblur"));
+                if (mtkSettings.has("MJC_Dejudder")) put(catBrightness, "memcDejudder", mtkSettings.optInt("MJC_Dejudder"));
+                if (mtkSettings.has("Global_Dimming")) put(catBrightness, "globalDimming", mtkSettings.optString("Global_Dimming"));
+                if (mtkSettings.has("Dark_Detail")) put(catBrightness, "darkDetail", mtkSettings.optString("Dark_Detail"));
+                if (mtkSettings.has("Low_Blue_Light")) put(catBrightness, "lowBlueLight", mtkSettings.optString("Low_Blue_Light"));
+                if (mtkSettings.has("Film_Mode")) put(catBrightness, "filmMode", mtkSettings.optString("Film_Mode"));
+            } else {
+                put(catBrightness, "pqBrightness", aidlJson.opt("brightness"));
+                put(catBrightness, "pqContrast", aidlJson.opt("contrast"));
+                put(catBrightness, "pqSaturation", aidlJson.opt("saturation"));
+                put(catBrightness, "pqSharpness", aidlJson.opt("sharpness"));
+                put(catBrightness, "pqHue", aidlJson.opt("hue"));
+
+                int colorTemp = aidlJson.optInt("colorTemp", -1);
+                put(catBrightness, "colorTemperatureMode", formatColorTemp(colorTemp));
+            }
+
             if (aidlJson.has("wbRed")) {
                 put(catBrightness, "whiteBalanceGains",
                         "R: " + aidlJson.optInt("wbRed") + " / G: " + aidlJson.optInt("wbGreen") + " / B: " + aidlJson.optInt("wbBlue"));
@@ -569,6 +626,8 @@ public class ProjectorInfoCollector {
             JSONObject raw = new JSONObject();
             raw.put("aidl", aidlJson);
             raw.put("gmpf", gmpfJson);
+            raw.put("mtkPq", mtkSettings != null ? mtkSettings : (gMtkPq != null ? gMtkPq : JSONObject.NULL));
+            if (tvSourcesStatus != null) raw.put("tvSourcesStatus", tvSourcesStatus);
             raw.put("frameworkDisplay", fwDisplay);
             raw.put("frameworkAudio", fwAudio);
             raw.put("settings", settingsJson);
@@ -735,7 +794,13 @@ public class ProjectorInfoCollector {
                     "picture_list_hdr",
                     "game_picture_mode_params",
                     "nrdp_audio_platform_capabilities",
-                    "user_disabled_hdr_formats"
+                    "user_disabled_hdr_formats",
+                    "TvSourcesStatus",
+                    "running_package_name",
+                    "pre_package_name",
+                    "HDR_Mode",
+                    "picture_advanced_performance_mode",
+                    "pq_db_write_status"
             };
             for (String k : globalStrKeys) {
                 try {
@@ -800,7 +865,9 @@ public class ProjectorInfoCollector {
                 "vendor.xgimi.hdmi.playing.state",
                 "vendor.xgimi.system.audio.digital_output_format",
                 "sys.mtk.running.application",
-                "sys.xgimi.pqmode.isperf"
+                "sys.xgimi.pqmode.isperf",
+                "vendor.mtk.playback.running",
+                "vendor.mtk.key_repeat_delay_during_playback"
         };
         Method sysPropGet = null;
         try {
@@ -882,6 +949,149 @@ public class ProjectorInfoCollector {
         if (gmpfSrc == 24) return "HDMI 2";
         if (gmpfSrc == 34 || gmpfSrc == 0) return "Android TV / Home";
         return "Source (" + gmpfSrc + ")";
+    }
+
+    private static String resolveHdrStatus(
+            int gTvHdrType,
+            boolean isPlayingHdr,
+            JSONObject gTv,
+            String tvSourcesStatus,
+            int mtkHdrType,
+            String mtkPicMode,
+            boolean isInternalStorage) {
+
+        // 1. Android TV Framework / MediaCodec state from Settings.Global "TvSourcesStatus"
+        if (tvSourcesStatus != null && !tvSourcesStatus.trim().isEmpty()) {
+            String upper = tvSourcesStatus.trim().toUpperCase();
+            if (upper.contains("DOLBYVISION")) return "Dolby Vision";
+            if (upper.contains("HDR10PLUS") || upper.contains("HDR10+")) return "HDR10+";
+            if (upper.contains("HDR10")) return "HDR10";
+            if (upper.contains("HLG")) return "HLG (Hybrid Log-Gamma)";
+            if (upper.contains("HDRVIVID")) return "HDR Vivid";
+            if (upper.contains("SDR")) {
+                if (mtkPicMode == null || !mtkPicMode.startsWith("DolbyVision")) {
+                    return "SDR (Standard Dynamic Range)";
+                }
+            }
+        }
+
+        // 2. MTK PQ IPq.getHdrType HAL report (0=NONE/SDR, 1=HDR10, 2=DOLBY, 3=TCH, 4=HLG, 5=HDR10+, 6=HDRVIVID)
+        if (mtkHdrType == 2) return "Dolby Vision";
+        if (mtkHdrType == 1) return "HDR10";
+        if (mtkHdrType == 5) return "HDR10+";
+        if (mtkHdrType == 4) return "HLG (Hybrid Log-Gamma)";
+        if (mtkHdrType == 6) return "HDR Vivid";
+        if (mtkHdrType == 3) return "Technicolor HDR";
+
+        // 3. Active Picture Mode indicates Dolby Vision
+        if (mtkPicMode != null && mtkPicMode.startsWith("DolbyVision")) {
+            return "Dolby Vision";
+        }
+
+        // 4. Fall back to GmTvManagerService (authoritative for HDMI)
+        return formatHdrType(gTvHdrType, isPlayingHdr, gTv);
+    }
+
+    private static String resolvePictureMode(int aidlPicMode, String mtkPicMode, boolean isInternalStorage) {
+        if (mtkPicMode != null && !mtkPicMode.trim().isEmpty()) {
+            return formatMtkPictureMode(mtkPicMode);
+        }
+        return formatPictureMode(aidlPicMode);
+    }
+
+    private static String formatMtkPictureMode(String mode) {
+        if (mode == null || mode.trim().isEmpty()) return null;
+        mode = mode.trim();
+        if ("DolbyVisionDark".equalsIgnoreCase(mode)) return "Dolby Vision Dark";
+        if ("DolbyVisionBright".equalsIgnoreCase(mode)) return "Dolby Vision Bright";
+        if ("DolbyVisionGame".equalsIgnoreCase(mode)) return "Dolby Vision Game";
+        if ("DolbyVisionIQ".equalsIgnoreCase(mode)) return "Dolby Vision IQ";
+        if ("DolbyVisionCustom".equalsIgnoreCase(mode)) return "Dolby Vision Custom";
+        if ("FilmMaker".equalsIgnoreCase(mode)) return "Filmmaker Mode";
+        if ("ImaxEnhanced".equalsIgnoreCase(mode)) return "IMAX Enhanced";
+        if ("Standard".equalsIgnoreCase(mode)) return "Standard";
+        if ("Movie".equalsIgnoreCase(mode)) return "Movie";
+        if ("Sport".equalsIgnoreCase(mode)) return "Sport";
+        if ("Vivid".equalsIgnoreCase(mode)) return "Vivid";
+        if ("Game".equalsIgnoreCase(mode)) return "Game";
+        if ("Monitor".equalsIgnoreCase(mode)) return "Monitor";
+        if ("Office".equalsIgnoreCase(mode)) return "Office";
+        if ("User".equalsIgnoreCase(mode)) return "Custom / User";
+        return mode;
+    }
+
+    private static String formatMtkColorTemp(String ct) {
+        if (ct == null || ct.trim().isEmpty()) return null;
+        ct = ct.trim();
+        if ("FMMSDR".equalsIgnoreCase(ct)) return "Filmmaker SDR / Warm (FMMSDR)";
+        if ("Warm".equalsIgnoreCase(ct)) return "Warm";
+        if ("Standard".equalsIgnoreCase(ct)) return "Standard";
+        if ("Cold".equalsIgnoreCase(ct) || "Cool".equalsIgnoreCase(ct)) return "Cold / Cool";
+        if ("User".equalsIgnoreCase(ct)) return "Custom / User";
+        return ct;
+    }
+
+    private static JSONObject queryMtkPqFallback() {
+        JSONObject res = new JSONObject();
+        try {
+            Class<?> sm = Class.forName("android.os.ServiceManager");
+            Method getService = sm.getMethod("getService", String.class);
+            IBinder binder = (IBinder) getService.invoke(null, "vendor.mediatek.hardware.pq.IPq/default");
+            if (binder == null || !binder.isBinderAlive()) return null;
+
+            String desc = binder.getInterfaceDescriptor();
+
+            Parcel data54 = Parcel.obtain();
+            Parcel reply54 = Parcel.obtain();
+            try {
+                data54.writeInterfaceToken(desc);
+                data54.writeInt(1);
+                data54.writeInt(1);
+                boolean ok54 = binder.transact(54, data54, reply54, 0);
+                if (ok54) {
+                    reply54.readException();
+                    int retLen = reply54.readInt();
+                    for (int i = 0; i < retLen; i++) reply54.readInt();
+                    int strLen = reply54.readInt();
+                    for (int i = 0; i < strLen; i++) {
+                        String s = reply54.readString();
+                        if (s != null && s.startsWith("{")) {
+                            try {
+                                res.put("settings", new JSONObject(s));
+                            } catch (Throwable ignore) {}
+                        }
+                    }
+                }
+            } finally {
+                data54.recycle();
+                reply54.recycle();
+            }
+
+            Parcel data59 = Parcel.obtain();
+            Parcel reply59 = Parcel.obtain();
+            try {
+                data59.writeInterfaceToken(desc);
+                data59.writeInt(0);
+                data59.writeInt(1);
+                data59.writeInt(1);
+                boolean ok59 = binder.transact(59, data59, reply59, 0);
+                if (ok59) {
+                    reply59.readException();
+                    int retLen = reply59.readInt();
+                    for (int i = 0; i < retLen; i++) reply59.readInt();
+                    int hdrLen = reply59.readInt();
+                    if (hdrLen > 0) {
+                        res.put("hdrType", reply59.readInt());
+                    }
+                }
+            } finally {
+                data59.recycle();
+                reply59.recycle();
+            }
+        } catch (Throwable ignore) {
+            return null;
+        }
+        return res.length() > 0 ? res : null;
     }
 
     private static String formatHdrType(int hdrType, boolean isPlayingHdr, JSONObject gTv) {
