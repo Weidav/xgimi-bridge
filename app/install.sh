@@ -2,7 +2,7 @@
 # Install the bridge APK to the projector and grant runtime exemptions it needs.
 #
 # Target selection (in order):
-#   1. PROJECTOR=<host[:port]> ./install.sh   — explicit, e.g. PROJECTOR=xgimi.local
+#   1. PROJECTOR=<host[:port]> ./install.sh   — explicit, e.g. PROJECTOR=192.168.0.55
 #   2. Auto-pick from `adb devices` when exactly one device is connected.
 #   3. Otherwise fail with instructions.
 set -e

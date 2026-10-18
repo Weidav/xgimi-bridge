@@ -6,7 +6,6 @@ Background-only Android service for an **XGIMI Horizon 20** (Base, Pro & Max) pr
 
 - HTTP API on port **8080**
 - Web UI on the same port — works in any modern mobile or desktop browser; add to your phone's home screen (iOS Safari "Add to Home Screen", Android Chrome "Install app") for a standalone-app feel. The bridge sets long `Cache-Control` headers on the hashed asset bundle so the OS keeps the shell on disk after first load. A "Disconnected" badge surfaces in the header when the bridge is unreachable.
-- mDNS hostname **`xgimi.local`** so the IP can rotate
 - No app icon, no apps-screen presence on the projector, survives reboot via persisted `JobScheduler`
 
 > **Note on offline behaviour**: the bridge serves over plain HTTP, so a service worker can't register (browsers require HTTPS for SW registration). Offline-shell caching relies on the browser's home-screen / installed-app cache plus our `Cache-Control: immutable` headers. Effective for the typical "projector asleep / Wi-Fi blip" case, less so when the OS evicts the cache. If you want a true SW-backed offline shell, terminate the bridge behind HTTPS yourself (self-signed cert + per-device trust install).
@@ -72,16 +71,15 @@ bridge/
 │   ├── build.sh                      Builds bridge.apk via javac + d8 + aapt2 + apksigner
 │   ├── install.sh                    Installs + grants whitelist/appops + kicks the service
 │   ├── debug.keystore                Self-signed key (auto-generated if missing)
-│   ├── lib/                          NanoHTTPD 2.3.1, JmDNS 3.4.1
+│   ├── lib/                          NanoHTTPD 2.3.1
 │   ├── src/com/xgimi/bridge/
 │   │   ├── AidlClient.java           Raw Binder to com.xgimi.xgimiservice (system uid)
-│   │   ├── BridgeService.java        Foreground service: HTTP + mDNS lifecycle
+│   │   ├── BridgeService.java        Foreground service: HTTP lifecycle
 │   │   ├── BridgeJobService.java     Persisted JobScheduler job for boot auto-start
 │   │   ├── HttpServer.java           NanoHTTPD subclass with /api/* routes
 │   │   ├── KeyDispatcher.java        Long-lived input-event injector (runs as shell uid)
 │   │   ├── LauncherActivity.java     Hidden helper activity (not in apps drawer)
 │   │   ├── LocalAdbClient.java       Pure-Java ADB client → loopback adbd
-│   │   ├── MdnsAdvertiser.java       JmDNS advertisement of xgimi.local + _http._tcp
 │   │   └── PresetStore.java          JSON-backed preset CRUD + apply
 │   ├── assets/web/                   Built web bundle (overwritten by web/ build)
 │   └── build/bridge.apk              Signed APK output
@@ -133,7 +131,6 @@ cd ../app && ./build.sh        # output: build/bridge.apk
 # 3) Install on the projector and grant runtime exemptions
 ./install.sh                   # auto-picks the only connected ADB device
 # or pass the host explicitly:
-PROJECTOR=xgimi.local ./install.sh
 PROJECTOR=192.168.0.55 ./install.sh
 ```
 
@@ -151,7 +148,7 @@ adb connect <projector-ip>:5555
 4. `am start -n com.xgimi.bridge/.LauncherActivity` (kicks the service + schedules the persistent job)
 5. `cmd jobscheduler run com.xgimi.bridge 7331` (force-fires the job once)
 
-After this, the bridge is reachable at `http://xgimi.local:8080/` from any phone on the same Wi-Fi.
+After this, the bridge is reachable at `http://<projector-ip>:8080/` from any phone on the same Wi-Fi.
 
 ## First-run authorization
 
@@ -167,7 +164,7 @@ Boot is handled entirely by a `JobScheduler` job with `setPersisted(true)` (`Bri
 
 `setPersisted(true)` requires `RECEIVE_BOOT_COMPLETED` or the framework throws — that's the only reason that permission is in the manifest. The `BOOT_COMPLETED` broadcast itself is silently dropped on this firmware for non-system apps.
 
-Worst-case latency from boot to `xgimi.local:8080` answering: ~90 seconds.
+Worst-case latency from boot to `http://<projector-ip>:8080` answering: ~90 seconds.
 
 ## HTTP API
 
@@ -232,7 +229,6 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 - **WB sliders only visibly affect the picture on color-temp slot 0.** HDMI + game mode is the typical combination that lands there. Other combinations write to slot 0 successfully but you won't see the change.
 - **AIDL `switchToSignalSource` is a stub** on this firmware. The bridge instead switches HDMI inputs via `TvContract.buildChannelUriForPassthroughInput` on the root hardware `TvInputInfo`, and switches Home/Apps via `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` (stopping `com.google.android.tv.inputplayer`).
 - **BAL bypass for the input switch** requires the `SYSTEM_ALERT_WINDOW` appop (granted by `install.sh`). The grant survives until reboot; on a fresh boot you'd need to re-run `install.sh` only if you want the cold-start input switch to work — the rest of the bridge functions normally.
-- **`xgimi.local` resolution** uses mDNS / Bonjour. iOS, macOS, and most Android builds with NSD resolve it natively in browsers. Some shell tools can't resolve `.local` via `getaddrinfo` — use the IP directly, or query mDNS explicitly (`dns-sd -G v4 xgimi.local` on macOS, `avahi-resolve -n xgimi.local` on Linux).
 - **The bridge needs ADB-over-TCP enabled on the projector** to authorize itself. Anyone else on the same LAN who can reach port 5555 already has full ADB access — this isn't worse than what ADB-over-TCP already gives you.
 
 ## Rebuild only the web app

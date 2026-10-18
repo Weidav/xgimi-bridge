@@ -13,7 +13,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <application android:label="Xgimi Bridge" android:hasCode="true">
         <!-- Hidden helper activity: launchable by component name, not in apps drawer -->

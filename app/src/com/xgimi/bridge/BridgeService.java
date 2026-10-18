@@ -23,7 +23,6 @@ public class BridgeService extends Service {
     private HttpServer server;
     private AidlClient aidl;
     private PresetStore presets;
-    private MdnsAdvertiser mdns;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
 
@@ -43,8 +42,6 @@ public class BridgeService extends Service {
             server = new HttpServer(this, HTTP_PORT, aidl, presets);
             server.start();
             Log.i(TAG, "HTTP server started on :" + HTTP_PORT);
-            mdns = new MdnsAdvertiser(this, HTTP_PORT);
-            mdns.start();
         } catch (IOException e) {
             Log.e(TAG, "failed to start http", e);
         }
@@ -57,7 +54,6 @@ public class BridgeService extends Service {
     public void onDestroy() {
         Log.i(TAG, "service onDestroy");
         if (server != null) server.stop();
-        if (mdns != null) mdns.stop();
         if (aidl != null) aidl.disconnect();
         releaseLocks();
         super.onDestroy();
@@ -66,7 +62,7 @@ public class BridgeService extends Service {
     /**
      * Hold a partial CPU wake lock and a high-perf Wi-Fi lock for the lifetime of the service.
      * Without these, the projector's standby state suspends the CPU and powers down the radio,
-     * killing the HTTP socket and dropping the mDNS advertisement until the next boot/wake.
+     * killing the HTTP socket until the next boot/wake.
      */
     private void acquireLocks() {
         try {
