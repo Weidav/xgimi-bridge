@@ -1,11 +1,3 @@
-@font-face {
-  font-family: 'Silkscreen';
-  src: url('./fonts/silkscreen.woff2') format('woff2');
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --bg: #000;
   --panel: rgba(28, 28, 30, 0.72);
