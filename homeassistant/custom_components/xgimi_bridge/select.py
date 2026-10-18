@@ -95,12 +95,11 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
         for p in presets:
             if isinstance(p, dict) and p.get("name") == option:
                 preset_id = p.get("id")
-                if preset_id:
-                    if await self.coordinator.async_post_json(
-                        f"/api/presets/{preset_id}/apply"
-                    ):
-                        self._current_preset_name = option
-                        self.async_write_ha_state()
+                if preset_id and await self.coordinator.async_post_json(
+                    f"/api/presets/{preset_id}/apply"
+                ):
+                    self._current_preset_name = option
+                    self.async_write_ha_state()
                 break
 
 

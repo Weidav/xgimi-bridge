@@ -59,7 +59,7 @@ class XgimiSlider(XgimiEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value on the projector."""
-        int_val = int(round(value))
+        int_val = round(value)
         await self.coordinator.async_post_json(
             f"/api/picture/{self._endpoint}",
             {"value": int_val},

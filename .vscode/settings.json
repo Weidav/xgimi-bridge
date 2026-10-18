@@ -12,4 +12,5 @@
     "[markdown]": {
         "editor.defaultFormatter": "yzhang.markdown-all-in-one"
     },
+    "python.defaultInterpreterPath": "${workspaceFolder}/homeassistant/.venv/bin/python"
 }

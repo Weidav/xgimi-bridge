@@ -12,6 +12,11 @@ app/debug.keystore
 web/node_modules/
 web/dist/
 
+# Python / uv
+.uv/
+.venv/
+**/__pycache__/
+
 # OS / editor
 .DS_Store
 *.swp
