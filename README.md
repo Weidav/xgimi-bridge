@@ -1,6 +1,6 @@
-# XGIMI Horizon 20
+# XGIMI Horizon 20 Series Remote
 
-<p align="center"><img src="docs/demo.gif" alt="Xgimi Bridge web app in action" width="300"></p>
+<p align="left"><img src="app/assets/web/icon-512.png" alt="XGIMI Remote" width="300"></p>
 
 Background-only Android service for an **XGIMI Horizon 20** (Base, Pro & Max) projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
 
@@ -20,7 +20,9 @@ Background-only Android service for an **XGIMI Horizon 20** (Base, Pro & Max) pr
 - Settings / gear (opens Google TV settings dashboard)
 - Auto-focus
 - Google Assistant key
-- Source switch (Apps / HDMI 1 / HDMI 2)
+- Keyboard / on-screen text input injection
+- Source switch (Android TV with running app detection / HDMI 1 / HDMI 2)
+- Projector diagnostics & telemetry dashboard (`/api/info`)
 - White balance R/G/B (slot-0 — visible in HDMI + game-mode combos)
 - Brightness / contrast / saturation / sharpness / hue
 - Named picture presets — built-in **Balanced** preset is non-removable
@@ -80,7 +82,8 @@ bridge/
 │   │   ├── LauncherActivity.java     Hidden helper activity (not in apps drawer)
 │   │   ├── LocalAdbClient.java       Pure-Java ADB client → loopback adbd
 │   │   ├── MiniHttp.java             Dependency-free HTTP/1.1 server (java.net.ServerSocket)
-│   │   └── PresetStore.java          JSON-backed preset CRUD + apply
+│   │   ├── PresetStore.java          JSON-backed preset CRUD + apply
+│   │   └── ProjectorInfoCollector.java Diagnostics & sensor telemetry collector
 │   ├── assets/web/                   Built web bundle (overwritten by web/ build)
 │   └── build/bridge.apk              Signed APK output
 └── web/                              React + Vite web app (writes to ../app/assets/web)
@@ -93,7 +96,7 @@ bridge/
 
 ## Download
 
-Prebuilt APKs are attached to each [GitHub Release](https://github.com/andotsy/xgimi-bridge/releases). Grab the latest `bridge.apk` and skip ahead to the install steps below — you only need the build prerequisites if you want to compile from source.
+Prebuilt APKs are attached to each [GitHub Release](https://github.com/Weidav/xgimi-bridge/releases). Grab the latest `bridge.apk` and skip ahead to the install steps below — you only need the build prerequisites if you want to compile from source.
 
 ## Prerequisites
 
@@ -168,14 +171,15 @@ Worst-case latency from boot to `http://<projector-ip>:8080` answering: ~90 seco
 
 ## HTTP API
 
-State / picture / sources:
+State / telemetry / picture / sources:
 
-- `GET  /api/state`                  `{ ready, awake, port, ts }`
-- `GET  /api/picture`                full picture snapshot (including `awake`, `pictureMode`, `colorTemp`, `gameMode`, etc.)
+- `GET  /api/state`                  `{ ready, awake, port, runningApp, ts }`
+- `GET  /api/info`                   comprehensive projector diagnostics & telemetry (optics, thermals, display, audio, system)
+- `GET  /api/picture`                full picture snapshot (including `awake`, `pictureMode`, `colorTemp`, `gameMode`, `runningApp`, etc.)
 - `GET  /api/inputs`                 current `TvInputManager` listing with CEC-derived names
 - `POST /api/picture/<knob>`         `{ "value": <int> }` — knobs: `wb-red`, `wb-green`, `wb-blue`, `color-temp`, `picture-mode`, `game-mode`, `brightness`, `contrast`, `saturation`, `sharpness`, `hue`
 - `POST /api/picture/reset`          `{ "mode": <int>, "force": <bool> }`
-- `POST /api/input`                  `{ "to": "HDMI1" | "HDMI2" | "STORAGE" }`
+- `POST /api/input`                  `{ "to": "HDMI1" | "HDMI2" | "STORAGE" | "HOME" }`
 
 Presets (persist to `/data/data/com.xgimi.bridge/files/presets.json`):
 
