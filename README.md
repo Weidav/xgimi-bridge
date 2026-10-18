@@ -119,7 +119,7 @@ npm --prefix web run build && (cd app && ./build.sh && ./install.sh)
 Or pass the projector IP/host explicitly if not already paired:
 
 ```bash
-npm --prefix web run build && (cd app && ./build.sh && PROJECTOR=192.168.0.55 ./install.sh)
+npm --prefix web run build && (cd app && ./build.sh && PROJECTOR=192.168.3.17 ./install.sh)
 ```
 
 ### Step-by-step
@@ -134,7 +134,7 @@ cd ../app && ./build.sh        # output: build/bridge.apk
 # 3) Install on the projector and grant runtime exemptions
 ./install.sh                   # auto-picks the only connected ADB device
 # or pass the host explicitly:
-PROJECTOR=192.168.0.55 ./install.sh
+PROJECTOR=192.168.3.17 ./install.sh
 ```
 
 If no device is connected, pair first:
