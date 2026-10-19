@@ -69,44 +69,19 @@ Picture-quality knobs and source switching go through Xgimi's system-uid AIDL se
 ```
 bridge/
 ├── app/                              Android app (plain Android SDK build, no Gradle)
-│   ├── AndroidManifest.xml
-│   ├── build.sh                      Builds bridge.apk via javac + d8 + aapt2 + apksigner
-│   ├── install.sh                    Installs + grants whitelist/appops + kicks the service
-│   ├── debug.keystore                Self-signed key (auto-generated if missing)
-│   ├── src/com/xgimi/bridge/
-│   │   ├── AidlClient.java           Raw Binder to com.xgimi.xgimiservice (system uid)
-│   │   ├── BridgeService.java        Foreground service: HTTP lifecycle
-│   │   ├── BridgeJobService.java     Persisted JobScheduler job for boot auto-start
-│   │   ├── HttpServer.java           /api/* routes + static web assets
-│   │   ├── KeyDispatcher.java        Long-lived input-event injector (runs as shell uid)
-│   │   ├── LauncherActivity.java     Hidden helper activity (not in apps drawer)
-│   │   ├── LocalAdbClient.java       Pure-Java ADB client → loopback adbd
-│   │   ├── MiniHttp.java             Dependency-free HTTP/1.1 server (java.net.ServerSocket)
-│   │   ├── PresetStore.java          JSON-backed preset CRUD + apply
-│   │   └── ProjectorInfoCollector.java Diagnostics & sensor telemetry collector
-│   ├── assets/web/                   Built web bundle (overwritten by web/ build)
-│   └── build/bridge.apk              Signed APK output
-└── web/                              React + Vite web app (writes to ../app/assets/web)
-    ├── src/App.jsx
-    ├── src/index.css
-    ├── src/main.jsx
-    ├── public/icon-{180,192,512}.png
-    └── vite.config.js
+│   ├── assets/web/                   Built web bundle served by the bridge
+│   └── src/com/xgimi/bridge/         AIDL client, local ADB loopback, MiniHttp server
+├── homeassistant/                    Home Assistant integration
+│   └── custom_components/xgimi_bridge/ Custom component (switch, number, select, buttons)
+└── web/                              React + Vite web app
+    ├── public/                       Web app icons & manifest
+    └── src/                          Frontend UI source
 ```
 
-## Download
-
-Prebuilt APKs are attached to each [GitHub Release](https://github.com/Weidav/xgimi-bridge/releases). Grab the latest `bridge.apk` and skip ahead to the install steps below — you only need the build prerequisites if you want to compile from source.
-
-## Prerequisites
-
-- Android SDK with `build-tools/34.0.0` and `platforms/android-34`. Set `ANDROID_SDK_ROOT` (defaults to `/opt/android-sdk`).
-- JDK 17.
-- Node + npm (for the web build).
-- `adb` reachable, paired with the projector over Wi-Fi (port 5555). Projector ADB confirmation already accepted on the device.
-- ADB-over-TCP must remain enabled on the projector at runtime — the bridge reaches `127.0.0.1:5555` on the device itself. On most Xgimi firmware this is enabled by default and survives reboot; if not, `setprop service.adb.tcp.port 5555` then restart `adbd`.
-
 ## Build & install
+
+> [!TIP]
+> Use the prepared **Dev Container** (`.devcontainer/`). It comes preconfigured with JDK 17, Android SDK tools (`android-34`, `build-tools/34.0.0`), Node.js, and `adb`, so you can build and deploy without manually configuring local toolchains.
 
 ### One-liner build & deploy
 
@@ -233,15 +208,8 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 - **WB sliders only visibly affect the picture on color-temp slot 0.** HDMI + game mode is the typical combination that lands there. Other combinations write to slot 0 successfully but you won't see the change.
 - **AIDL `switchToSignalSource` is a stub** on this firmware. The bridge instead switches HDMI inputs via `TvContract.buildChannelUriForPassthroughInput` on the root hardware `TvInputInfo`, and switches Home/Apps via `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` (stopping `com.google.android.tv.inputplayer`).
 - **BAL bypass for the input switch** requires the `SYSTEM_ALERT_WINDOW` appop (granted by `install.sh`). The grant survives until reboot; on a fresh boot you'd need to re-run `install.sh` only if you want the cold-start input switch to work — the rest of the bridge functions normally.
-- **The bridge needs ADB-over-TCP enabled on the projector** to authorize itself. Anyone else on the same LAN who can reach port 5555 already has full ADB access — this isn't worse than what ADB-over-TCP already gives you.
+- **The bridge needs ADB-over-TCP enabled on the projector** to authorize itself. Anyone else on the same LAN who can reach port 5555 already has full ADB access — this isn't worse than what ADB-over-TCP already gives you. (On most XGIMI firmware this is enabled by default; if not, run `setprop service.adb.tcp.port 5555` and restart `adbd`).
 
-## Rebuild only the web app
-
-```bash
-npm --prefix web run build && (cd app && ./build.sh && ./install.sh)
-```
-
-The Vite build writes directly into `app/assets/web/`, which `build.sh` zips into the APK.
 
 ## Custom keycodes
 
