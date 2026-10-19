@@ -5,7 +5,7 @@ requires-python = ">=3.14"
 dependencies = []
 
 [dependency-groups]
-dev = [
-    "homeassistant>=2026.2.3",
-    "ruff>=0.17.1",
-]
+dev = ["homeassistant>=2026.2.3", "ruff>=0.17.1"]
+
+[tool.pyright]
+typeCheckingMode = "standard"

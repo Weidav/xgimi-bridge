@@ -35,7 +35,8 @@
                 "vscjava.vscode-java-pack",
                 "redhat.vscode-xml",
                 "ms-python.python",
-                "charliermarsh.ruff"
+                "charliermarsh.ruff",
+                "tamasfe.even-better-toml"
             ]
         }
     },

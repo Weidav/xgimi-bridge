@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -35,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Refresh data, but do not fail setup if projector is off in standby
     try:
         await coordinator.async_config_entry_first_refresh()
-    except Exception as err:
+    except (ConfigEntryNotReady, TimeoutError, aiohttp.ClientError) as err:
         _LOGGER.debug("Initial refresh warning (projector may be off): %s", err)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator

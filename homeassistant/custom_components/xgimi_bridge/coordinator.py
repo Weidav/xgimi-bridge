@@ -56,7 +56,8 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     self._last_data["awake"] = False
                     self._last_data["online"] = False
-        except Exception:
+        except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.debug("Picture state request failed (standby or offline): %s", err)
             # Standby or network drop: do not mark entity unavailable so user can turn on
             self._last_data["awake"] = False
             self._last_data["online"] = False
@@ -70,8 +71,8 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         presets = await resp.json()
                         if isinstance(presets, list):
                             self._last_data["presets"] = presets
-            except Exception:
-                pass
+            except (aiohttp.ClientError, TimeoutError) as err:
+                _LOGGER.debug("Presets request failed: %s", err)
 
         return self._last_data
 
@@ -84,8 +85,8 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _, writer = await asyncio.wait_for(conn, timeout=0.8)
                 writer.close()
                 await writer.wait_closed()
-            except Exception:
-                pass
+            except (OSError, TimeoutError) as err:
+                _LOGGER.debug("WoWLAN knock on port %s: %s", port, err)
 
         await asyncio.sleep(0.8)
 
@@ -100,7 +101,7 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if resp.status == 200:
                         woke = True
                         break
-            except Exception:
+            except (aiohttp.ClientError, TimeoutError):
                 await asyncio.sleep(0.6)
 
         # Fallback to standard power/on if already awake
@@ -111,8 +112,8 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     on_url, timeout=aiohttp.ClientTimeout(total=1.5)
                 ):
                     pass
-            except Exception:
-                pass
+            except (aiohttp.ClientError, TimeoutError) as err:
+                _LOGGER.debug("Fallback power on request failed: %s", err)
 
         self._last_data["awake"] = True
         self._last_data["online"] = True
@@ -127,8 +128,10 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             async with self.session.post(url, timeout=aiohttp.ClientTimeout(total=2.0)):
                 pass
-        except Exception:
-            pass
+        except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.debug(
+                "Power off request exception (expected if entering standby): %s", err
+            )
         self._last_data["awake"] = False
         self.async_set_updated_data(self._last_data)
         self.hass.loop.call_later(
@@ -147,7 +150,7 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if resp.status == 200:
                     await self.async_request_refresh()
                     return True
-        except Exception as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.warning("POST %s failed: %s", path, err)
         return False
 

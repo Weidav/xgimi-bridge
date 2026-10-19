@@ -45,11 +45,11 @@ class XgimiInputSourceSelect(XgimiEntity, SelectEntity):
 
     _attr_name = "Input Source"
     _attr_icon = "mdi:video-input-hdmi"
-    _attr_options = list(INPUT_TO_API.keys())
 
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize select entity."""
         super().__init__(coordinator, "select_input_source")
+        self._attr_options = list(INPUT_TO_API.keys())
 
     @property
     def current_option(self) -> str | None:
@@ -108,11 +108,11 @@ class XgimiPictureModeSelect(XgimiEntity, SelectEntity):
 
     _attr_name = "Picture Mode"
     _attr_icon = "mdi:television-guide"
-    _attr_options = list(PICTURE_MODE_REV.keys())
 
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize picture mode select."""
         super().__init__(coordinator, "select_picture_mode")
+        self._attr_options = list(PICTURE_MODE_REV.keys())
 
     @property
     def current_option(self) -> str | None:
@@ -134,11 +134,11 @@ class XgimiColorTempSelect(XgimiEntity, SelectEntity):
 
     _attr_name = "Color Temperature"
     _attr_icon = "mdi:palette"
-    _attr_options = list(COLOR_TEMP_REV.keys())
 
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize color temperature select."""
         super().__init__(coordinator, "select_color_temp")
+        self._attr_options = list(COLOR_TEMP_REV.keys())
 
     @property
     def current_option(self) -> str | None:
@@ -160,11 +160,11 @@ class XgimiGameModeSelect(XgimiEntity, SelectEntity):
 
     _attr_name = "Game Mode"
     _attr_icon = "mdi:gamepad-variant"
-    _attr_options = list(GAME_MODE_REV.keys())
 
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize game mode select."""
         super().__init__(coordinator, "select_game_mode")
+        self._attr_options = list(GAME_MODE_REV.keys())
 
     @property
     def current_option(self) -> str | None:
