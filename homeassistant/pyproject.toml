@@ -9,3 +9,6 @@ dev = ["homeassistant>=2026.2.3", "ruff>=0.17.1"]
 
 [tool.pyright]
 typeCheckingMode = "standard"
+
+[tool.ruff]
+line-length = 120
