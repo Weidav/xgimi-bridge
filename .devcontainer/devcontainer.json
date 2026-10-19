@@ -18,6 +18,9 @@
         "UV_TOOL_DIR": "${containerWorkspaceFolder}/.uv/tools"
     },
     "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        },
         "ghcr.io/devcontainers/features/python:1": {
             "version": "3.14"
         },
