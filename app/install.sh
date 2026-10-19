@@ -14,16 +14,18 @@ if [ -n "$PROJECTOR" ]; then
     P="$PROJECTOR"
 else
     devices=$(adb devices | awk 'NR>1 && $2=="device" {print $1}')
-    count=$(printf '%s\n' "$devices" | grep -c .)
-    if [ "$count" = "1" ]; then
-        P="$devices"
-        echo "Using auto-detected device: $P"
-    elif [ "$count" = "0" ]; then
+    if [ -z "$devices" ]; then
         echo "No ADB device connected." >&2
         echo "Pair over Wi-Fi first, then re-run:" >&2
         echo "    adb connect <projector-ip>:5555" >&2
         echo "Or set PROJECTOR=<host[:port]> ./install.sh" >&2
         exit 1
+    fi
+
+    count=$(printf '%s\n' "$devices" | grep -c .)
+    if [ "$count" = "1" ]; then
+        P="$devices"
+        echo "Using auto-detected device: $P"
     else
         echo "Multiple ADB devices connected — pick one:" >&2
         printf '%s\n' "$devices" | sed 's/^/    /' >&2

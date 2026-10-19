@@ -47,17 +47,7 @@ This document summarizes findings, architectural flaws, bugs, duplicate code, ov
 - **File**: [`homeassistant/custom_components/xgimi_bridge/const.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/const.py#L6)
 - **Flaw**: `DEFAULT_HOST = "192.168.3.17"` is hardcoded as default for new installations. It should be empty or localhost, prompting the user for their projector's IP rather than defaulting to the author's local subnet.
 
-### 1.7 `install.sh` aborts before printing its "no device" guidance
-- **File**: [`app/install.sh`](file:///workspaces/xgimi-bridge/app/install.sh#L16-L22)
-- **Flaw**: The script runs under `set -e`, then does:
-  ```bash
-  count=$(printf '%s\n' "$devices" | grep -c .)
-  ```
-  `grep -c` exits with status 1 when it matches nothing, so with zero connected devices the script dies on line 17 — before the `elif [ "$count" = "0" ]` branch that prints the helpful "No ADB device connected / adb connect …" message.
-- **Verified**: reproduced in a shell (`count=0` → script exits 1 immediately).
-- **Fix**: `count=$(printf '%s\n' "$devices" | grep -c . || true)` or `count=$(printf '%s\n' "$devices" | awk 'NF{n++} END{print n+0}')`.
-
-### 1.8 Home Assistant options flow crashes on current HA
+### 1.7 Home Assistant options flow crashes on current HA
 - **File**: [`homeassistant/custom_components/xgimi_bridge/config_flow.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/config_flow.py#L70-L72)
 - **Flaw**:
   ```python
@@ -68,108 +58,108 @@ This document summarizes findings, architectural flaws, bugs, duplicate code, ov
 - **Verified**: `OptionsFlow.config_entry.fset` is `None` in the installed HA version.
 - **Fix**: delete the `__init__` entirely and use the inherited `self.config_entry` property inside `async_step_init`.
 
-### 1.9 "Copy JSON" silently does nothing on the LAN
+### 1.8 "Copy JSON" silently does nothing on the LAN
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx#L1378-L1387)
 - **Flaw**: `copyJson()` calls `navigator.clipboard.writeText(...)`. The Clipboard API requires a **secure context**; `http://<projector-ip>:8080` is not one, so `navigator.clipboard` is `undefined` and the `catch (_) {}` swallows the failure. The button flips to "Copied" only on success, so it appears dead.
 - **Compounded by**: `body { user-select: none; }` in [`web/src/index.css`](file:///workspaces/xgimi-bridge/web/src/index.css#L33) prevents manually selecting the raw telemetry `<pre>`, so there is no fallback path at all.
 - **Fix**: fall back to a hidden `<textarea>` + `document.execCommand("copy")`, and set `user-select: text` on `.info-raw-pre`.
 
-### 1.10 `/api/state` reports a hardcoded port
+### 1.9 `/api/state` reports a hardcoded port
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L87)
 - **Flaw**: `.put("port", 8080)` is hardcoded even though `MiniHttp` is constructed with a configurable port and exposes `getListeningPort()`. If the port ever changes, the API lies.
 
-### 1.11 Malformed JSON is silently treated as an empty body
+### 1.10 Malformed JSON is silently treated as an empty body
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L454-L466)
 - **Flaw**: `readJsonBody()` catches `JSONException`, logs the raw body at INFO, and returns `new JSONObject()`. Callers then report `"missing value"` / `"missing to"` instead of `"invalid JSON"`. It also logs arbitrary user text — including `/api/adb/text` payloads — to logcat.
 
-### 1.12 Preset apply reports success even when writes fail to converge
+### 1.11 Preset apply reports success even when writes fail to converge
 - **File**: [`app/src/com/xgimi/bridge/PresetStore.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/PresetStore.java#L241-L296)
 - **Flaw**: `writeAndVerify()` retries 4×, then logs an error and returns `void`; `applyValues()` ignores the outcome; `apply()` always returns `{"ok": true}`. `writePictureItem()` likewise discards the boolean returned by `setIntInt`. A preset can silently fail to apply while the UI shows success.
 
-### 1.13 `reset` echoes a sentinel value
+### 1.12 `reset` echoes a sentinel value
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L289-L333)
 - **Flaw**: `int value = body.optInt("value", Integer.MIN_VALUE)` is included in the reply for every knob, including `reset`, which returns `"value": -2147483648`.
 
-### 1.14 No range validation on picture knobs
+### 1.13 No range validation on picture knobs
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L289-L333)
 - **Flaw**: Any int (negative, >100) is forwarded to the AIDL HAL. The web UI clamps to 0–100 and HA `number` entities enforce 0–100, but direct HTTP calls do not.
 
-### 1.15 Power on/off is a check-then-toggle race
+### 1.14 Power on/off is a check-then-toggle race
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L248-L287)
 - **Flaw**: `handlePower()` reads `isAwake()` and then injects `KEYCODE_POWER`, which is a **toggle**. Two concurrent requests, or a state change between read and inject, flip the projector the wrong way. It also returns `"awake": true/false` unconditionally, regardless of the actual result.
 
-### 1.16 `KeyDispatcher` wake listener is unauthenticated and ignores the request
+### 1.15 `KeyDispatcher` wake listener is unauthenticated and ignores the request
 - **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java#L108-L143)
 - **Flaw**: `startWakeServer()` binds `0.0.0.0:8081` and wakes the projector on **any** TCP connection without reading the request. The HA coordinator POSTs to `/wake`, but the path and verb are never inspected. Anyone on the LAN can wake the projector. The server socket is never closed and runs on a daemon thread with no lifecycle.
 
-### 1.17 Data races on `LocalAdbClient` dispatcher fields
+### 1.16 Data races on `LocalAdbClient` dispatcher fields
 - **File**: [`app/src/com/xgimi/bridge/LocalAdbClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/LocalAdbClient.java#L93-L114)
 - **Flaw**: `dispSock`, `dispLocalId`, and `dispRemoteId` are non-volatile and read outside `dispatcherLock` in `warmUpAsync()` and `isAuthorized()`. The unsynchronized fast-path checks can observe stale values and spawn a second dispatcher.
 
-### 1.18 `KeyDispatcher` telemetry caches are unsynchronized statics
+### 1.17 `KeyDispatcher` telemetry caches are unsynchronized statics
 - **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java#L258-L263)
 - **Flaw**: `cachedCec`, `cachedCecTs`, `cachedTof`, `cachedAmbient`, and `cachedTofTs` are static, non-volatile, and mutated from whichever HTTP worker thread calls `/api/info`. Concurrent requests can race and publish partially-updated caches.
 
-### 1.19 `ProjectorInfoCollector` duplicate settings key
+### 1.18 `ProjectorInfoCollector` duplicate settings key
 - **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java#L775-L812)
 - **Flaw**: `collectSettings()` reads `picture_advanced_performance_mode` in both the `globalIntKeys` and `globalStrKeys` loops. The string read overwrites the int under the same `global.` prefix, so `advancedPerformanceMode` (`optInt(...) == 1`) can silently become false when the stored value is a string.
 
-### 1.20 `BridgeService` holds a wake lock forever
+### 1.19 `BridgeService` holds a wake lock forever
 - **File**: [`app/src/com/xgimi/bridge/BridgeService.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/BridgeService.java#L66-L86)
 - **Flaw**: `acquireLocks()` takes a non-reference-counted `PARTIAL_WAKE_LOCK` and a `WIFI_MODE_FULL_LOW_LATENCY` lock with no timeout, released only in `onDestroy`. This keeps the CPU and Wi-Fi radio at full power permanently — a significant idle-power cost on a projector.
 
-### 1.21 `BridgeService` has no recovery if the HTTP server fails to bind
+### 1.20 `BridgeService` has no recovery if the HTTP server fails to bind
 - **File**: [`app/src/com/xgimi/bridge/BridgeService.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/BridgeService.java#L33-L40)
 - **Flaw**: `onCreate()` catches `IOException`, logs it, and leaves the service running with `server == null`. `START_STICKY` does not re-run `onCreate`, so the bridge stays dead until the process is killed.
 
-### 1.22 Exported components with no permission
+### 1.21 Exported components with no permission
 - **File**: [`app/AndroidManifest.xml`](file:///workspaces/xgimi-bridge/app/AndroidManifest.xml#L18-L27)
 - **Flaw**: `BridgeJobService` is declared `android:exported="true"` (JobScheduler does not require it), and `LauncherActivity` is exported with no permission. Any app on the device can trigger the job or start the activity.
 
-### 1.23 Unused / misleading manifest permissions
+### 1.22 Unused / misleading manifest permissions
 - **File**: [`app/AndroidManifest.xml`](file:///workspaces/xgimi-bridge/app/AndroidManifest.xml#L6-L14)
 - **Flaw**:
   - `ACCESS_NETWORK_STATE` is declared but never used (no `ConnectivityManager`).
   - `SYSTEM_ALERT_WINDOW` is declared and granted by `install.sh`, but no overlay window is ever created; the README attributes the input-switch BAL bypass to it, yet the code never uses it.
   - `KILL_BACKGROUND_PROCESSES` is **missing** despite `killBackgroundProcesses()` being called (see 1.1).
 
-### 1.24 No authentication or CSRF protection beyond a same-origin check
+### 1.23 No authentication or CSRF protection beyond a same-origin check
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L64-L79)
 - **Flaw**: Any device on the LAN can call every endpoint, including `/api/power/restart`, `/api/adb/text`, and `/api/presets/*`. The only guard is an `Origin`/`Host` comparison for mutating methods, which a non-browser client trivially omits. This is a deliberate LAN-trust model, but it should be documented as such — the README only discusses ADB exposure.
 
-### 1.25 `serveAsset` loads every asset fully into memory per request
+### 1.24 `serveAsset` loads every asset fully into memory per request
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L473-L506)
 - **Flaw**: `serveAsset()` copies the asset into a `ByteArrayOutputStream`, then `MiniHttp` writes it. The 262 KB JS bundle is re-read and re-copied on every cold request, and responses are never gzip-compressed. `MiniHttp.newFixedLengthResponse(..., InputStream, long)` exists but is unused.
 
-### 1.26 Route matching is prefix-based and ambiguous
+### 1.25 Route matching is prefix-based and ambiguous
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java#L146-L150)
 - **Flaw**: `uri.startsWith("/api/input")` also matches `/api/inputs` for POST; `uri.startsWith("/api/presets")` matches `/api/presetsfoo`; `uri.startsWith("/api/adb/")` matches any method. A route table with exact/pattern matching would remove the ambiguity.
 
-### 1.27 `MiniHttp` parses query parameters and fragments that nothing consumes
+### 1.26 `MiniHttp` parses query parameters and fragments that nothing consumes
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java#L124-L150)
 - **Flaw**: `Request.query` and `Request.parms` are populated for every request but never read by `HttpServer`. `Request` also has an unused 4-arg constructor and a set of getters that duplicate public fields.
 
-### 1.28 `MiniHttp` supports chunked request bodies that no client sends
+### 1.27 `MiniHttp` supports chunked request bodies that no client sends
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java#L380-L470)
 - **Flaw**: ~90 lines of chunked-transfer decoding (including trailer parsing) are dead weight for a browser/HA client that always sends `Content-Length`. The 64 KB body cap is fine, but the complexity is not justified.
 
-### 1.29 `MiniHttp` error path duplicates the response writer
+### 1.28 `MiniHttp` error path duplicates the response writer
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java#L694-L706)
 - **Flaw**: `sendError()` re-implements status line, headers, date, and body emission instead of building a `Response` and using the normal writer. It also omits `Allow` on 405 and always closes the connection.
 
-### 1.30 `MiniHttp` `readLine` reads one byte at a time
+### 1.29 `MiniHttp` `readLine` reads one byte at a time
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java#L660-L680)
 - **Flaw**: `readLine()` calls `in.read()` per byte. It is wrapped in a `BufferedInputStream`, so syscalls are amortized, but the per-byte loop is still the hot path for every header line.
 
-### 1.31 `MiniHttp.stop()` does not await executor termination
+### 1.30 `MiniHttp.stop()` does not await executor termination
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java#L196-L220)
 - **Flaw**: `executor.shutdownNow()` is called but not awaited; in-flight handlers can still touch `openSockets`/`serverSocket` after `stop()` returns. `BridgeService.onDestroy()` then unbinds AIDL while handlers may still be running.
 
-### 1.32 `LauncherActivity` is a full programmatic UI for a one-shot message
+### 1.31 `LauncherActivity` is a full programmatic UI for a one-shot message
 - **File**: [`app/src/com/xgimi/bridge/LauncherActivity.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/LauncherActivity.java#L18-L70)
 - **Flaw**: ~90 lines build a `LinearLayout`/`TextView` screen and enumerate network interfaces just to show "Service started" and a URL. A `Toast` plus the existing foreground notification would do the same job with far less code.
 
-### 1.33 `build.sh` is fragile
+### 1.32 `build.sh` is fragile
 - **File**: [`app/build.sh`](file:///workspaces/xgimi-bridge/app/build.sh)
 - **Flaw**:
   - Unquoted `$OUT`, `$PROJ`, `$PLATFORM`, and `find` expansions break on paths with spaces.
@@ -177,19 +167,19 @@ This document summarizes findings, architectural flaws, bugs, duplicate code, ov
   - `zip -r ... assets/` can include stale files if `app/assets/web` was not cleaned (the web build does clean it, but `build.sh` does not verify).
   - The keystore is generated silently with a fixed password; `keytool` output is discarded, so failures are hard to diagnose.
 
-### 1.34 `install.sh` assumes tools and timing
+### 1.33 `install.sh` assumes tools and timing
 - **File**: [`app/install.sh`](file:///workspaces/xgimi-bridge/app/install.sh)
 - **Flaw**: No check that `build/bridge.apk` exists before `adb install`; `pkill` may not exist on all Android builds (the `|| true` hides it); `sleep 2` is a fixed race between `am start` and `cmd jobscheduler run`; `adb devices` parsing assumes the default format.
 
-### 1.35 Version drift across the three deliverables
+### 1.34 Version drift across the three deliverables
 - Android `versionName="0.2"`, web `0.0.2`, HA `manifest.json` `1.0.0`, HA `pyproject.toml` `0.1.0`. There is no single source of truth and no release automation.
 
-### 1.36 No tests, no CI, no license
+### 1.35 No tests, no CI, no license
 - No unit/integration tests for `MiniHttp`, `PresetStore`, `LocalAdbClient`, the HA coordinator, or the React app.
 - No `.github/workflows`.
 - No `LICENSE` file despite public GitHub releases.
 
-### 1.37 README drift
+### 1.36 README drift
 - **File**: [`README.md`](file:///workspaces/xgimi-bridge/README.md)
 - The layout tree omits `homeassistant/`, `web/public/`, and `findings_and_flaws.md`.
 - The build one-liner is repeated verbatim in two sections.
@@ -371,7 +361,7 @@ Each item below was confirmed to have **zero** call sites outside its own declar
 | `AidlClient.readSysFsViaAidl(String)`                                                                                                                                                                                                                                                                                                                                                                             | `AidlClient.java:214`                   | Never called.                                                  |
 | `AidlClient.TX_SET_GAME_MODE_OPTION_FOR_SOURCE`                                                                                                                                                                                                                                                                                                                                                                   | `AidlClient.java:82`                    | Constant only; the getter counterpart is used.                 |
 | `MiniHttp.isAlive()`                                                                                                                                                                                                                                                                                                                                                                                              | `MiniHttp.java:225`                     | Never called.                                                  |
-| `MiniHttp.getListeningPort()`                                                                                                                                                                                                                                                                                                                                                                                     | `MiniHttp.java:229`                     | Never called — and `/api/state` hardcodes 8080 instead (1.10). |
+| `MiniHttp.getListeningPort()`                                                                                                                                                                                                                                                                                                                                                                                     | `MiniHttp.java:229`                     | Never called — and `/api/state` hardcodes 8080 instead (1.9).  |
 | `MiniHttp.Response.Status.getRequestStatus()`                                                                                                                                                                                                                                                                                                                                                                     | `MiniHttp.java:66`                      | Never called.                                                  |
 | `MiniHttp.Response.Status.getDescription()`                                                                                                                                                                                                                                                                                                                                                                       | `MiniHttp.java:70`                      | Never called.                                                  |
 | `MiniHttp.Request(Method, String, Map, byte[])`                                                                                                                                                                                                                                                                                                                                                                   | `MiniHttp.java:124`                     | Unused constructor overload.                                   |
@@ -629,29 +619,28 @@ Each of these is a one- or two-line wrapper with exactly one call site. They add
 ## 4. Prioritized Recommendations
 
 ### Must fix (correctness / security)
-1. `install.sh` `grep -c` + `set -e` abort (1.7).
-2. HA options flow `config_entry` assignment (1.8) — Configure is broken.
-3. Add `KILL_BACKGROUND_PROCESSES` or remove the `killBackgroundProcesses` call (1.1).
-4. Fix the two conflicting `hdrType` enum mappings (2.8).
-5. Make preset apply report failures instead of always `ok: true` (1.12).
-6. Add range validation to `/api/picture/*` (1.14).
-7. Restrict or authenticate the port-8081 wake listener (1.16).
-8. Fix the `picture_advanced_performance_mode` double-read (1.19).
+1. HA options flow `config_entry` assignment (1.7) — Configure is broken.
+2. Add `KILL_BACKGROUND_PROCESSES` or remove the `killBackgroundProcesses` call (1.1).
+3. Fix the two conflicting `hdrType` enum mappings (2.8).
+4. Make preset apply report failures instead of always `ok: true` (1.11).
+5. Add range validation to `/api/picture/*` (1.13).
+6. Restrict or authenticate the port-8081 wake listener (1.15).
+7. Fix the `picture_advanced_performance_mode` double-read (1.18).
 
 ### Should fix (duplication / maintainability)
-9. Single source of truth for knobs, enums, keycodes, and input sources (2.9–2.13, 2.21–2.23).
-10. Deduplicate the MediaTek PQ binder client (2.1).
-11. Deduplicate the binder/reflection helpers (2.15) and the ADB send/retry wrappers (2.16).
-12. Split `ProjectorInfoCollector`, `KeyDispatcher`, `HttpServer`, and `App.jsx` (3.2–3.5, 3.12).
-13. Replace the 20+ enum formatters with tables (3.1).
-14. Cache presets in memory and stop rewriting built-ins on read (3.9, 3.10).
-15. Remove the duplicate power binary sensor or the power switch (2.19).
+8. Single source of truth for knobs, enums, keycodes, and input sources (2.9–2.13, 2.21–2.23).
+9. Deduplicate the MediaTek PQ binder client (2.1).
+10. Deduplicate the binder/reflection helpers (2.15) and the ADB send/retry wrappers (2.16).
+11. Split `ProjectorInfoCollector`, `KeyDispatcher`, `HttpServer`, and `App.jsx` (3.2–3.5, 3.12).
+12. Replace the 20+ enum formatters with tables (3.1).
+13. Cache presets in memory and stop rewriting built-ins on read (3.9, 3.10).
+14. Remove the duplicate power binary sensor or the power switch (2.19).
 
 ### Nice to have (polish / hygiene)
-16. Self-host the font (3.38).
-17. Fix the clipboard fallback and `user-select` (1.9).
-18. Remove dead CSS/JS/Java (2.5, 2.6, 2.25, 2.26, 2.28).
-19. Add tests, CI, and a license (1.36).
-20. Unify versions and document the LAN-trust security model (1.24, 1.35).
-21. Fix README drift (1.37, 3.41).
-22. Replace `MiniHttp` with `com.sun.net.httpserver` or trim unused features (3.4, 3.18, 3.19).
+15. Self-host the font (3.38).
+16. Fix the clipboard fallback and `user-select` (1.8).
+17. Remove dead CSS/JS/Java (2.5, 2.6, 2.25, 2.26, 2.28).
+18. Add tests, CI, and a license (1.35).
+19. Unify versions and document the LAN-trust security model (1.23, 1.34).
+20. Fix README drift (1.36, 3.41).
+21. Replace `MiniHttp` with `com.sun.net.httpserver` or trim unused features (3.4, 3.18, 3.19).
