@@ -13,8 +13,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
 
-    <application android:label="Xgimi Bridge" android:hasCode="true">
+    <application android:label="Xgimi Bridge" android:hasCode="true" android:allowBackup="false">
         <!-- Hidden helper activity: launchable by component name, not in apps drawer -->
         <activity android:name=".LauncherActivity" android:exported="true" />
 

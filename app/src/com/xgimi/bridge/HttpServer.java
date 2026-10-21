@@ -14,189 +14,552 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class HttpServer extends MiniHttp {
     private static final String TAG = "XgimiBridge";
+
     private final Context ctx;
     private final AidlClient aidl;
     private final PresetStore presets;
     private final LocalAdbClient adb;
+    private final DeviceCommands deviceCommands;
+    private final RequestPolicy requestPolicy;
 
     public HttpServer(Context ctx, int port, AidlClient aidl, PresetStore presets) {
-        super(port);
+        this(ctx, port, aidl, presets, new LocalAdbClient(ctx),
+                new RequestPolicy(ctx != null ? ctx.getFilesDir() : null));
+        this.adb.warmUpAsync();
+    }
+
+    public HttpServer(Context ctx, int port, AidlClient aidl, PresetStore presets,
+                      LocalAdbClient adb, RequestPolicy policy) {
+        super(port, Limits.forPort8080());
         this.ctx = ctx;
         this.aidl = aidl;
         this.presets = presets;
-        this.adb = new LocalAdbClient(ctx);
-        this.adb.warmUpAsync();
+        this.adb = adb;
+        this.deviceCommands = new DeviceCommands(aidl, adb);
+        this.requestPolicy = policy != null ? policy : new RequestPolicy(ctx != null ? ctx.getFilesDir() : null);
+    }
+
+    public RequestPolicy getRequestPolicy() {
+        return requestPolicy;
     }
 
     @Override
     public void stop() {
         super.stop();
-        adb.close();
+        if (adb != null) {
+            adb.close();
+        }
     }
 
     @Override
     protected Response serve(Request req) {
         String uri = req.uri;
-        Log.i(TAG, req.method + " " + uri);
+        int listeningPort = getListeningPort();
 
-        Response r;
+        // Validate Host header for all requests (assets + API)
+        String host = req.headers.get("host");
+        if (!requestPolicy.isHostAllowed(host, listeningPort)) {
+            return json(Response.Status.FORBIDDEN, errJson("request_forbidden", "Host forbidden: " + host));
+        }
+
+        // Validate Origin header for mutation methods
+        if (req.method == Method.POST || req.method == Method.PUT || req.method == Method.DELETE) {
+            String origin = req.headers.get("origin");
+            if (!requestPolicy.isOriginAllowed(origin, listeningPort, false)) {
+                return json(Response.Status.FORBIDDEN, errJson("request_forbidden", "Origin forbidden: " + origin));
+            }
+        }
+
         try {
             if (uri.startsWith("/api/")) {
-                r = handleApi(req, uri);
+                return handleApi(req, uri);
             } else {
-                r = serveAsset(req, uri);
+                return serveAsset(req, uri);
             }
         } catch (Throwable t) {
-            Log.e(TAG, "handler crash", t);
-            r = json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
+            Log.e(TAG, "Handler exception on " + uri, t);
+            return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", t.getMessage()));
         }
-        return r;
-    }
-
-    private static boolean isGetOrHead(Method m) {
-        return m == Method.GET || m == Method.HEAD;
     }
 
     private Response handleApi(Request req, String uri) throws IOException {
         Method m = req.method;
-        if (m == Method.POST || m == Method.PUT || m == Method.DELETE) {
-            String origin = req.headers.get("origin");
-            String host = req.headers.get("host");
-            if (origin != null && !origin.isEmpty()) {
-                if (host == null || host.trim().isEmpty()) {
-                    return json(Response.Status.FORBIDDEN, errJson("cross-origin request missing host header"));
-                }
-                String originHost = origin.replaceFirst("^https?://", "");
-                int slash = originHost.indexOf('/');
-                if (slash >= 0) originHost = originHost.substring(0, slash);
-                if (!originHost.equalsIgnoreCase(host.trim())) {
-                    return json(Response.Status.FORBIDDEN, errJson("cross-origin request forbidden"));
-                }
-            }
-        }
 
-        if (uri.equals("/api/state") && isGetOrHead(m)) {
+        // /api/state
+        if (uri.equals("/api/state")) {
+            if (m != Method.GET && m != Method.HEAD) {
+                return methodNotAllowed("GET, HEAD");
+            }
             JSONObject o = new JSONObject();
             try {
                 o.put("ready", aidl.isReady())
                  .put("awake", isAwake())
-                 .put("port", 8080)
+                 .put("port", getListeningPort())
                  .put("runningApp", getRunningApp(ctx))
                  .put("ts", System.currentTimeMillis());
-            } catch (JSONException e) {}
+            } catch (JSONException ignored) {}
             return json(Response.Status.OK, o.toString());
         }
-        if (uri.equals("/api/inputs") && isGetOrHead(m)) {
-            try {
-                android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
-                    ctx.getSystemService(android.content.Context.TV_INPUT_SERVICE);
-                JSONArray arr = new JSONArray();
-                if (tim != null) {
-                    for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
-                        JSONObject o = new JSONObject();
-                        try {
-                            o.put("id", info.getId());
-                            o.put("type", info.getType());
-                            CharSequence label = info.loadLabel(ctx);
-                            o.put("label", label != null ? label.toString() : null);
-                            CharSequence custom = info.loadCustomLabel(ctx);
-                            o.put("customLabel", custom != null ? custom.toString() : null);
-                            // Reflectively access HdmiDeviceInfo (hidden @SystemApi)
-                            try {
-                                java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
-                                Object hdi = m1.invoke(info);
-                                if (hdi != null) {
-                                    java.lang.reflect.Method getDisplayName = hdi.getClass().getMethod("getDisplayName");
-                                    Object dn = getDisplayName.invoke(hdi);
-                                    if (dn != null) o.put("displayName", dn.toString());
-                                    java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
-                                    Object pid = getPortId.invoke(hdi);
-                                    if (pid != null) o.put("hdmiPortId", ((Integer) pid).intValue());
-                                }
-                            } catch (Throwable ignore) {}
-                        } catch (JSONException ignore) {}
-                        arr.put(o);
-                    }
-                }
-                return json(Response.Status.OK, arr.toString());
-            } catch (Throwable t) {
-                Log.e(TAG, "inputs enum failed", t);
-                return json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
+
+        // /api/inputs
+        if (uri.equals("/api/inputs")) {
+            if (m != Method.GET && m != Method.HEAD) {
+                return methodNotAllowed("GET, HEAD");
             }
+            return handleInputsEnum();
         }
-        if (uri.equals("/api/picture") && isGetOrHead(m)) {
-            Map<String,Object> snap = aidl.snapshot();
+
+        // /api/picture
+        if (uri.equals("/api/picture")) {
+            if (m != Method.GET && m != Method.HEAD) {
+                return methodNotAllowed("GET, HEAD");
+            }
+            Map<String, Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
             snap.put("runningApp", getRunningApp(ctx));
-            // wrap nested maps as JSONObjects so JSONObject does not toString() them
-            for (Map.Entry<String,Object> e : snap.entrySet()) {
-                if (e.getValue() instanceof Map) e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
+            for (Map.Entry<String, Object> e : snap.entrySet()) {
+                if (e.getValue() instanceof Map) {
+                    e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
+                }
             }
             return json(Response.Status.OK, new JSONObject(snap).toString());
         }
-        if (uri.equals("/api/info") && isGetOrHead(m)) {
+
+        // /api/info
+        if (uri.equals("/api/info")) {
+            if (m != Method.GET && m != Method.HEAD) {
+                return methodNotAllowed("GET, HEAD");
+            }
             JSONObject info = ProjectorInfoCollector.collectAll(ctx, aidl, adb);
             return json(Response.Status.OK, info.toString());
         }
 
-        if (m == Method.POST && uri.startsWith("/api/picture/")) return handlePictureSet(req, uri);
-        if (m == Method.POST && uri.startsWith("/api/input")) return handleInputSwitch(req, uri);
-        if (uri.startsWith("/api/presets")) return handlePresets(req, uri);
-        if (m == Method.POST && uri.startsWith("/api/power/")) return handlePower(uri);
-        if (uri.startsWith("/api/adb/")) return handleAdb(req, uri, m);
+        // /api/picture/*
+        if (uri.startsWith("/api/picture/")) {
+            String knob = uri.substring("/api/picture/".length());
+            if (knob.isEmpty() || knob.contains("/")) {
+                return json(Response.Status.NOT_FOUND, errJson("not_found", "Invalid knob path"));
+            }
+            if (m != Method.POST) {
+                return methodNotAllowed("POST");
+            }
+            return handlePictureSet(req, knob);
+        }
 
-        return json(Response.Status.NOT_FOUND, errJson("no such endpoint"));
+        // /api/input
+        if (uri.equals("/api/input")) {
+            if (m != Method.POST) {
+                return methodNotAllowed("POST");
+            }
+            return handleInputSwitch(req);
+        }
+
+        // /api/power/*
+        if (uri.startsWith("/api/power/")) {
+            String action = uri.substring("/api/power/".length());
+            if (action.isEmpty() || action.contains("/")) {
+                return json(Response.Status.NOT_FOUND, errJson("not_found", "Invalid power action path"));
+            }
+            if (m != Method.POST) {
+                return methodNotAllowed("POST");
+            }
+            return handlePower(action);
+        }
+
+        // /api/presets or /api/presets/*
+        if (uri.equals("/api/presets") || uri.startsWith("/api/presets/")) {
+            return handlePresets(req, uri);
+        }
+
+        // /api/adb/*
+        if (uri.startsWith("/api/adb/")) {
+            return handleAdb(req, uri, m);
+        }
+
+        return json(Response.Status.NOT_FOUND, errJson("not_found", "Unknown API endpoint: " + uri));
     }
 
-    /**
-     * ADB-loopback shell-uid bridge. Replaces the broken-by-design same-host TLS path to
-     * Google's tv.remote.service. Lifecycle:
-     *
-     *   POST /api/adb/authorize         — first-run only. Triggers the on-screen "Allow USB
-     *                                     debugging from this computer?" prompt. User clicks
-     *                                     Allow + Always with the physical remote, once.
-     *   POST /api/adb/keyevent/<n>      — runs `input keyevent N` as shell uid (works because
-     *                                     shell has INJECT_EVENTS).
-     *   POST /api/adb/text              — sends arbitrary text to the TV via KeyDispatcher.
-     */
+    private Response handleInputsEnum() {
+        try {
+            android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
+                    ctx.getSystemService(Context.TV_INPUT_SERVICE);
+            JSONArray arr = new JSONArray();
+            if (tim != null) {
+                for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
+                    JSONObject o = new JSONObject();
+                    try {
+                        o.put("id", info.getId());
+                        o.put("type", info.getType());
+                        CharSequence label = info.loadLabel(ctx);
+                        o.put("label", label != null ? label.toString() : null);
+                        CharSequence custom = info.loadCustomLabel(ctx);
+                        o.put("customLabel", custom != null ? custom.toString() : null);
+                        try {
+                            java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
+                            Object hdi = m1.invoke(info);
+                            if (hdi != null) {
+                                java.lang.reflect.Method getDisplayName = hdi.getClass().getMethod("getDisplayName");
+                                Object dn = getDisplayName.invoke(hdi);
+                                if (dn != null) o.put("displayName", dn.toString());
+                                java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
+                                Object pid = getPortId.invoke(hdi);
+                                if (pid != null) o.put("hdmiPortId", ((Integer) pid).intValue());
+                            }
+                        } catch (Throwable ignored) {}
+                    } catch (JSONException ignored) {}
+                    arr.put(o);
+                }
+            }
+            return json(Response.Status.OK, arr.toString());
+        } catch (Throwable t) {
+            Log.e(TAG, "Inputs enumeration failed", t);
+            return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", t.getMessage()));
+        }
+    }
+
+    private Response handlePictureSet(Request req, String knob) {
+        if ("reset".equals(knob)) {
+            int mode = 0;
+            boolean force = false;
+            if (req.body != null && req.body.length > 0) {
+                Response ctCheck = checkJsonContentType(req);
+                if (ctCheck != null) return ctCheck;
+                try {
+                    SettingRules.preflightJsonObject(req.body);
+                    JSONObject body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+                    if (body.has("mode")) {
+                        Object rawMode = body.opt("mode");
+                        mode = SettingRules.validateIntegerRange(rawMode, Integer.MIN_VALUE, Integer.MAX_VALUE, "mode");
+                        if (mode != 0 && !SettingRules.ALLOWED_PICTURE_MODES.contains(mode)) {
+                            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid reset mode: " + mode));
+                        }
+                    }
+                    if (body.has("force")) {
+                        force = body.optBoolean("force", false);
+                    }
+                } catch (IllegalArgumentException e) {
+                    return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
+                } catch (JSONException e) {
+                    return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
+                }
+            }
+            DeviceCommands.CommandResult cr = deviceCommands.resetPicture(mode, force);
+            return toResponse(cr);
+        }
+
+        // Direct picture knob
+        String canonical = SettingRules.canonicalField(knob);
+        if (canonical == null || !SettingRules.isWritableField(canonical)) {
+            return json(Response.Status.NOT_FOUND, errJson("not_found", "Unknown knob: " + knob));
+        }
+
+        Response ctCheck = checkJsonContentType(req);
+        if (ctCheck != null) return ctCheck;
+
+        JSONObject body;
+        try {
+            SettingRules.preflightJsonObject(req.body);
+            body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+        } catch (JSONException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
+        }
+
+        if (!body.has("value") || body.isNull("value")) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "missing value"));
+        }
+
+        int validValue;
+        try {
+            validValue = SettingRules.validateSettingValue(canonical, body.opt("value"));
+        } catch (IllegalArgumentException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
+        }
+
+        DeviceCommands.CommandResult cr = deviceCommands.setPictureSetting(canonical, validValue);
+        return toResponse(cr);
+    }
+
+    private Response handleInputSwitch(Request req) {
+        Response ctCheck = checkJsonContentType(req);
+        if (ctCheck != null) return ctCheck;
+
+        JSONObject body;
+        try {
+            SettingRules.preflightJsonObject(req.body);
+            body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+        } catch (JSONException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
+        }
+
+        String to;
+        try {
+            to = SettingRules.validateInputTo(body.optString("to", null));
+        } catch (IllegalArgumentException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
+        }
+
+        try {
+            if ("STORAGE".equals(to) || "HOME".equals(to) || "APPS".equals(to)) {
+                try {
+                    android.app.ActivityManager am = (android.app.ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+                    if (am != null) {
+                        am.killBackgroundProcesses("com.google.android.tv.inputplayer");
+                    }
+                } catch (Throwable ignored) {}
+                Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+                home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                ctx.startActivity(home);
+                return json(Response.Status.OK, "{\"ok\":true,\"to\":\"STORAGE\"}");
+            }
+
+            int port = Integer.parseInt(to.substring(4));
+            String inputId = findHdmiPassthroughInputId(port);
+            Intent it = new Intent(Intent.ACTION_VIEW,
+                    android.media.tv.TvContract.buildChannelUriForPassthroughInput(inputId));
+            it.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            ctx.startActivity(it);
+            return json(Response.Status.OK, "{\"ok\":true,\"to\":\"" + to + "\"}");
+        } catch (Throwable t) {
+            Log.e(TAG, "Input switch failed", t);
+            return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", t.getMessage()));
+        }
+    }
+
+    private String findHdmiPassthroughInputId(int port) {
+        android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
+                ctx.getSystemService(Context.TV_INPUT_SERVICE);
+        if (tim == null) return null;
+        String fallback = null;
+        for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
+            try {
+                java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
+                Object hdi = m1.invoke(info);
+                if (hdi != null) {
+                    java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
+                    Object pid = getPortId.invoke(hdi);
+                    if (pid instanceof Integer && ((Integer) pid).intValue() == port) {
+                        if (info.getParentId() == null) return info.getId();
+                        if (fallback == null) fallback = info.getId();
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return fallback;
+    }
+
+    private Response handlePower(String action) {
+        DeviceCommands.CommandResult cr = deviceCommands.handlePowerAction(action, isAwake());
+        return toResponse(cr);
+    }
+
+    private Response handlePresets(Request req, String uri) {
+        Method m = req.method;
+        try {
+            if (uri.equals("/api/presets")) {
+                if (m == Method.GET || m == Method.HEAD) {
+                    JSONArray list = presets.load();
+                    return json(Response.Status.OK, list.toString());
+                }
+                if (m == Method.POST) {
+                    Response ctCheck = checkJsonContentType(req);
+                    if (ctCheck != null) return ctCheck;
+
+                    SettingRules.preflightJsonObject(req.body);
+                    JSONObject body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+                    JSONObject created = presets.create(body);
+                    return json(Response.Status.OK, created.toString());
+                }
+                return methodNotAllowed("GET, HEAD, POST");
+            }
+
+            // Path is /api/presets/...
+            String rest = uri.substring("/api/presets/".length());
+            String[] segments = rest.split("/");
+            if (segments.length == 0 || segments[0].isEmpty()) {
+                return json(Response.Status.NOT_FOUND, errJson("not_found", "Preset id missing"));
+            }
+
+            String id = segments[0];
+
+            if (segments.length == 1) {
+                // /api/presets/:id
+                if (m == Method.PUT) {
+                    Response ctCheck = checkJsonContentType(req);
+                    if (ctCheck != null) return ctCheck;
+
+                    SettingRules.preflightJsonObject(req.body);
+                    JSONObject body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+                    JSONObject updated = presets.update(id, body);
+                    if (updated == null) {
+                        return json(Response.Status.NOT_FOUND, errJson("not_found", "Preset not found: " + id));
+                    }
+                    return json(Response.Status.OK, updated.toString());
+                }
+                if (m == Method.DELETE) {
+                    boolean ok = presets.delete(id);
+                    if (!ok) {
+                        return json(Response.Status.NOT_FOUND, errJson("not_found", "Preset not found: " + id));
+                    }
+                    JSONObject r = new JSONObject();
+                    r.put("ok", true);
+                    return json(Response.Status.OK, r.toString());
+                }
+                return methodNotAllowed("PUT, DELETE");
+            }
+
+            if (segments.length == 2) {
+                String sub = segments[1];
+                if ("sync".equals(sub)) {
+                    if (m != Method.POST) return methodNotAllowed("POST");
+                    JSONObject body = null;
+                    if (req.body != null && req.body.length > 0) {
+                        Response ctCheck = checkJsonContentType(req);
+                        if (ctCheck != null) return ctCheck;
+                        SettingRules.preflightJsonObject(req.body);
+                        body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+                    }
+                    JSONObject synced = presets.syncFromCurrent(id, body);
+                    if (synced == null) {
+                        return json(Response.Status.NOT_FOUND, errJson("not_found", "Preset not found: " + id));
+                    }
+                    return json(Response.Status.OK, synced.toString());
+                }
+                if ("apply".equals(sub)) {
+                    if (m != Method.POST) return methodNotAllowed("POST");
+                    JSONObject preset = presets.getPreset(id);
+                    if (preset == null) {
+                        return json(Response.Status.NOT_FOUND, errJson("not_found", "Preset not found: " + id));
+                    }
+                    JSONObject valuesObj = preset.optJSONObject("values");
+                    Map<String, Integer> validated = presets.validateAndExtractValues(valuesObj);
+                    DeviceCommands.CommandResult cr = deviceCommands.applyPresetValues(id, validated);
+                    return toResponse(cr);
+                }
+            }
+
+            return json(Response.Status.NOT_FOUND, errJson("not_found", "Unknown preset route: " + uri));
+        } catch (PresetStore.BuiltinReadOnlyException be) {
+            return json(Response.Status.FORBIDDEN, errJson("builtin_read_only", be.getMessage()));
+        } catch (PresetStore.PresetStorageException se) {
+            return json(statusFromCode(se.statusCode), errJson(se.errorCode, se.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
+        } catch (JSONException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
+        } catch (IOException e) {
+            return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", e.getMessage()));
+        }
+    }
+
     private Response handleAdb(Request req, String uri, Method m) {
         try {
-            if (uri.equals("/api/adb/status") && isGetOrHead(m)) {
+            if (uri.equals("/api/adb/status")) {
+                if (m != Method.GET && m != Method.HEAD) return methodNotAllowed("GET, HEAD");
                 boolean ok = adb.isAuthorized();
                 return json(Response.Status.OK, "{\"authorized\":" + ok + "}");
             }
-            if (uri.equals("/api/adb/authorize") && m == Method.POST) {
+            if (uri.equals("/api/adb/authorize")) {
+                if (m != Method.POST) return methodNotAllowed("POST");
                 String r = adb.authorize();
                 return json(Response.Status.OK, "{\"ok\":true,\"state\":\"" + r + "\"}");
             }
-            if (uri.startsWith("/api/adb/keyevent/") && m == Method.POST) {
+            if (uri.startsWith("/api/adb/keyevent/")) {
+                if (m != Method.POST) return methodNotAllowed("POST");
+                String codeStr = uri.substring("/api/adb/keyevent/".length());
+                if (codeStr.contains("/")) {
+                    return json(Response.Status.NOT_FOUND, errJson("not_found", "Invalid adb key route"));
+                }
                 int code;
                 try {
-                    code = Integer.parseInt(uri.substring("/api/adb/keyevent/".length()));
-                } catch (NumberFormatException nfe) {
-                    return json(Response.Status.BAD_REQUEST, errJson("invalid keycode"));
+                    code = Integer.parseInt(codeStr);
+                    SettingRules.validateKeyCode(code);
+                } catch (IllegalArgumentException e) {
+                    return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid keycode: " + codeStr));
                 }
                 String out = adb.injectKey(code);
                 return json(Response.Status.OK, "{\"ok\":true,\"key\":" + code + ",\"out\":" + jsonString(out) + "}");
             }
-            if (uri.equals("/api/adb/text") && m == Method.POST) {
-                JSONObject body = readJsonBody(req);
-                String text = body.optString("text", "");
-                if (text.isEmpty()) {
-                    return json(Response.Status.BAD_REQUEST, errJson("missing text"));
+            if (uri.equals("/api/adb/text")) {
+                if (m != Method.POST) return methodNotAllowed("POST");
+                Response ctCheck = checkJsonContentType(req);
+                if (ctCheck != null) return ctCheck;
+
+                SettingRules.preflightJsonObject(req.body);
+                JSONObject body = new JSONObject(new String(req.body, StandardCharsets.UTF_8));
+                String text;
+                try {
+                    text = SettingRules.validateText(body.optString("text", null));
+                } catch (IllegalArgumentException e) {
+                    return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
                 }
                 String out = adb.injectText(text);
                 return json(Response.Status.OK, "{\"ok\":true,\"out\":" + jsonString(out) + "}");
             }
-        } catch (Exception e) {
-            Log.e(TAG, "adb endpoint " + uri + " failed", e);
-            return json(Response.Status.INTERNAL_ERROR, errJson("adb: " + e.getMessage()));
+        } catch (JSONException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
+        } catch (Throwable t) {
+            Log.e(TAG, "ADB endpoint " + uri + " failed", t);
+            return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", "adb: " + t.getMessage()));
         }
-        return json(Response.Status.NOT_FOUND, errJson("no such adb endpoint"));
+        return json(Response.Status.NOT_FOUND, errJson("not_found", "No such adb endpoint: " + uri));
+    }
+
+    private static Response checkJsonContentType(Request req) {
+        String ct = req.headers.get("content-type");
+        if (ct == null) {
+            return jsonResponse(Response.Status.UNSUPPORTED_MEDIA_TYPE,
+                    errJson("unsupported_media_type", "Content-Type must be application/json"));
+        }
+        String cleanCt = ct.split(";")[0].trim().toLowerCase(Locale.US);
+        if (!cleanCt.equals("application/json")) {
+            return jsonResponse(Response.Status.UNSUPPORTED_MEDIA_TYPE,
+                    errJson("unsupported_media_type", "Content-Type must be application/json"));
+        }
+        return null;
+    }
+
+    private static Response toResponse(DeviceCommands.CommandResult cr) {
+        return jsonResponse(statusFromCode(cr.httpStatus), cr.body.toString());
+    }
+
+    private static Response.Status statusFromCode(int code) {
+        for (Response.Status s : Response.Status.values()) {
+            if (s.code == code) return s;
+        }
+        return Response.Status.INTERNAL_ERROR;
+    }
+
+    private static Response methodNotAllowed(String allow) {
+        Response r = jsonResponse(Response.Status.METHOD_NOT_ALLOWED,
+                errJson("method_not_allowed", "Method not allowed. Allowed methods: " + allow));
+        r.addHeader("Allow", allow);
+        return r;
+    }
+
+    private static Response jsonResponse(Response.Status st, String body) {
+        return newFixedLengthResponse(st, "application/json; charset=utf-8", body);
+    }
+
+    private Response json(Response.Status st, String body) {
+        return jsonResponse(st, body);
+    }
+
+    private static String errJson(String code, String msg) {
+        JSONObject obj = new JSONObject();
+        try {
+            obj.put("ok", false);
+            obj.put("code", code != null ? code : "error");
+            obj.put("error", msg != null ? msg : "");
+        } catch (JSONException ignored) {}
+        return obj.toString();
     }
 
     private static String jsonString(String s) {
@@ -226,282 +589,44 @@ public class HttpServer extends MiniHttp {
             if (prop != null && !prop.trim().isEmpty() && !"null".equalsIgnoreCase(prop.trim())) {
                 return prop.trim();
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignored) {}
         try {
             String pkg = Settings.Global.getString(ctx.getContentResolver(), "running_package_name");
             if (pkg != null && !pkg.trim().isEmpty() && !"null".equalsIgnoreCase(pkg.trim())) {
                 return pkg.trim();
             }
-        } catch (Throwable ignore) {}
+        } catch (Throwable ignored) {}
         return null;
     }
 
-    /**
-     * Power actions:
-     *   on       — idempotently wake display if currently asleep
-     *   off      — idempotently put display to sleep if currently awake
-     *   toggle   — toggle display sleep/wake (KEYCODE_POWER = 26)
-     *   led-off  — turn projector lamp off while Android keeps running
-     *   led-on   — turn projector lamp on
-     *   restart  — sys.powerctl=reboot via the system-uid AIDL setSystemProperties broker call
-     */
-    private Response handlePower(String uri) {
-        String action = uri.substring("/api/power/".length());
-        try {
-            switch (action) {
-                case "on": {
-                    boolean awake = isAwake();
-                    if (!awake) {
-                        adb.injectKey(26);
-                    }
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"on\",\"awake\":true}");
-                }
-                case "off": {
-                    boolean awake = isAwake();
-                    if (awake) {
-                        adb.injectKey(26);
-                    }
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"off\",\"awake\":false}");
-                }
-                case "toggle":
-                case "standby": {
-                    adb.injectKey(26);
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"" + action + "\"}");
-                }
-                case "led-off":
-                    aidl.setLedOn(false);
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"led-off\"}");
-                case "led-on":
-                    aidl.setLedOn(true);
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"led-on\"}");
-                case "restart":
-                    aidl.setSystemProperty("sys.powerctl", "reboot");
-                    return json(Response.Status.OK, "{\"ok\":true,\"action\":\"restart\"}");
-                default:
-                    return json(Response.Status.NOT_FOUND, errJson("unknown power action: " + action));
-            }
-        } catch (Throwable t) {
-            Log.e("XgimiBridge", "power " + action + " failed", t);
-            return json(Response.Status.INTERNAL_ERROR, errJson("power " + action + " failed: " + t.getMessage()));
-        }
-    }
-
-    private Response handlePictureSet(Request req, String uri) throws IOException {
-        JSONObject body = readJsonBody(req);
-        String knob = uri.substring("/api/picture/".length());
-        if (!knob.equals("reset") && (!body.has("value") || body.isNull("value"))) {
-            return json(Response.Status.BAD_REQUEST, errJson("missing value"));
-        }
-        try {
-            boolean ok;
-            int value = body.optInt("value", Integer.MIN_VALUE);
-            switch (knob) {
-                case "wb-red":      ok = aidl.setInt(AidlClient.TX_SET_WB_RED_GAIN, value); break;
-                case "wb-green":    ok = aidl.setInt(AidlClient.TX_SET_WB_GREEN_GAIN, value); break;
-                case "wb-blue":     ok = aidl.setInt(AidlClient.TX_SET_WB_BLUE_GAIN, value); break;
-                case "color-temp":  ok = aidl.setInt(AidlClient.TX_SET_COLOR_TEMP, value); break;
-                case "picture-mode": ok = aidl.setInt(AidlClient.TX_SET_PICTURE_MODE, value); break;
-                case "game-mode":   ok = aidl.setInt(AidlClient.TX_SET_GAME_MODE_OPTION, value); break;
-                case "brightness":  ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 0, value); break;
-                case "contrast":    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 1, value); break;
-                case "saturation":  ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 2, value); break;
-                case "sharpness":   ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 3, value); break;
-                case "hue":         ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 4, value); break;
-                case "reset":
-                    // Explicit reset: write 50/50/50 with verify (resetPictureMode alone is unreliable for WB)
-                    aidl.setInt(AidlClient.TX_SET_WB_RED_GAIN, 50);
-                    Thread.sleep(60);
-                    aidl.setInt(AidlClient.TX_SET_WB_GREEN_GAIN, 50);
-                    Thread.sleep(60);
-                    aidl.setInt(AidlClient.TX_SET_WB_BLUE_GAIN, 50);
-                    Thread.sleep(60);
-                    aidl.resetPictureMode(body.optInt("mode", 0), body.optBoolean("force", false));
-                    ok = true; break;
-                default:
-                    return json(Response.Status.NOT_FOUND, errJson("unknown knob: " + knob));
-            }
-            JSONObject reply = new JSONObject();
-            try { reply.put("ok", ok).put("knob", knob).put("value", value); } catch (JSONException e) {}
-            return json(Response.Status.OK, reply.toString());
-        } catch (RemoteException re) {
-            return json(Response.Status.INTERNAL_ERROR, errJson("remote: " + re.getMessage()));
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            return json(Response.Status.INTERNAL_ERROR, errJson("interrupted"));
-        }
-    }
-
-
-    private Response handleInputSwitch(Request req, String uri) throws IOException {
-        JSONObject body = readJsonBody(req);
-        String to = body.optString("to", "").toUpperCase();
-
-        if (to.isEmpty()) {
-            return json(Response.Status.BAD_REQUEST, errJson("missing to"));
-        }
-
-        try {
-            if (to.equals("STORAGE") || to.equals("HOME") || to.equals("APPS")) {
-                // Kill the HDMI playback activity (otherwise its TvView keeps the pipeline)
-                try {
-                    android.app.ActivityManager am = (android.app.ActivityManager) ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE);
-                    am.killBackgroundProcesses("com.google.android.tv.inputplayer");
-                } catch (Throwable ignore) {}
-                // Bring Google TV home launcher to front
-                Intent home = new Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME);
-                home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                ctx.startActivity(home);
-                return json(Response.Status.OK, "{\"ok\":true,\"to\":\"STORAGE\"}");
-            }
-            if (!to.matches("HDMI[1-3]")) {
-                return json(Response.Status.BAD_REQUEST, errJson("invalid to: " + to));
-            }
-            int port = Integer.parseInt(to.substring(4));
-            String inputId = findHdmiPassthroughInputId(port);
-            Intent it = new Intent(
-                Intent.ACTION_VIEW,
-                android.media.tv.TvContract.buildChannelUriForPassthroughInput(inputId));
-            it.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            ctx.startActivity(it);
-            return json(Response.Status.OK, "{\"ok\":true,\"to\":\"" + to + "\"}");
-        } catch (Throwable t) {
-            Log.e(TAG, "input switch failed", t);
-            return json(Response.Status.INTERNAL_ERROR, errJson(t.getMessage()));
-        }
-    }
-
-    private String findHdmiPassthroughInputId(int port) {
-        android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager)
-            ctx.getSystemService(android.content.Context.TV_INPUT_SERVICE);
-        if (tim == null) return null;
-        String fallback = null;
-        for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
-            try {
-                java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
-                Object hdi = m1.invoke(info);
-                if (hdi != null) {
-                    java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
-                    Object pid = getPortId.invoke(hdi);
-                    if (pid instanceof Integer && ((Integer) pid).intValue() == port) {
-                        if (info.getParentId() == null) return info.getId();
-                        if (fallback == null) fallback = info.getId();
-                    }
-                }
-            } catch (Throwable ignore) {}
-        }
-        return fallback;
-    }
-
-    private Response handlePresets(Request req, String uri) throws IOException {
-        Method m = req.method;
-        // Routes:
-        //   GET    /api/presets
-        //   POST   /api/presets                    (create)
-        //   PUT    /api/presets/{id}               (rename / replace values)
-        //   POST   /api/presets/{id}/sync          (capture current as new values)
-        //   POST   /api/presets/{id}/apply         (apply to projector)
-        //   DELETE /api/presets/{id}
-        try {
-            if (uri.equals("/api/presets") && isGetOrHead(m)) {
-                return json(Response.Status.OK, presets.load().toString());
-            }
-            if (uri.equals("/api/presets") && m == Method.POST) {
-                JSONObject body = readJsonBody(req);
-                JSONObject created = presets.create(body);
-                return json(Response.Status.OK, created.toString());
-            }
-            String rest = uri.substring("/api/presets/".length());
-            String id, sub = "";
-            int slash = rest.indexOf('/');
-            if (slash < 0) { id = rest; } else { id = rest.substring(0, slash); sub = rest.substring(slash + 1); }
-            if (id.isEmpty()) return json(Response.Status.NOT_FOUND, errJson("preset id missing"));
-
-            if (sub.isEmpty() && m == Method.PUT) {
-                JSONObject body = readJsonBody(req);
-                JSONObject p = presets.update(id, body);
-                if (p == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
-                return json(Response.Status.OK, p.toString());
-            }
-            if (sub.isEmpty() && m == Method.DELETE) {
-                try {
-                    boolean ok = presets.delete(id);
-                    JSONObject r = new JSONObject();
-                    r.put("ok", ok);
-                    return json(Response.Status.OK, r.toString());
-                } catch (PresetStore.BuiltinException be) {
-                    return json(Response.Status.FORBIDDEN, errJson(be.getMessage()));
-                }
-            }
-            if (sub.equals("sync") && m == Method.POST) {
-                JSONObject body = readJsonBody(req);
-                JSONObject p = presets.syncFromCurrent(id, body);
-                if (p == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
-                return json(Response.Status.OK, p.toString());
-            }
-            if (sub.equals("apply") && m == Method.POST) {
-                JSONObject reply = presets.apply(id);
-                if (reply == null) return json(Response.Status.NOT_FOUND, errJson("preset not found"));
-                return json(Response.Status.OK, reply.toString());
-            }
-            return json(Response.Status.METHOD_NOT_ALLOWED, errJson("method not supported on " + uri));
-        } catch (JSONException | RemoteException e) {
-            return json(Response.Status.INTERNAL_ERROR, errJson(e.getMessage()));
-        }
-    }
-
-    private JSONObject readJsonBody(Request req) {
-        if (req.body == null || req.body.length == 0) return new JSONObject();
-        String raw = new String(req.body, java.nio.charset.StandardCharsets.UTF_8);
-        Log.i(TAG, "body bytes=" + req.body.length);
-        try {
-            return new JSONObject(raw);
-        } catch (JSONException e) {
-            Log.w(TAG, "json parse failed: " + raw);
-            return new JSONObject();
-        }
-    }
-
-    private Response json(Response.Status st, String body) {
-        return newFixedLengthResponse(st, "application/json; charset=utf-8", body);
-    }
-    private String errJson(String msg) {
-        try { return new JSONObject().put("error", msg == null ? "" : msg).toString(); } catch (JSONException e) { return "{\"error\":\"\"}"; }
-    }
-
     private Response serveAsset(Request req, String uri) {
-        if (!isGetOrHead(req.method)) {
-            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "text/plain", "Method not allowed");
+        if (req.method != Method.GET && req.method != Method.HEAD) {
+            return methodNotAllowed("GET, HEAD");
         }
         String path = uri.equals("/") ? "/index.html" : uri;
         if (path.startsWith("/")) path = path.substring(1);
         if (path.contains("..") || path.contains("//") || path.indexOf('\0') >= 0) {
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found");
+            return json(Response.Status.NOT_FOUND, errJson("not_found", "Asset not found"));
         }
         String assetPath = "web/" + path;
         AssetManager am = ctx.getAssets();
         try (InputStream is = am.open(assetPath)) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192]; int n;
+            byte[] buf = new byte[8192];
+            int n;
             while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
             byte[] data = out.toByteArray();
             Response r = newFixedLengthResponse(Response.Status.OK, mimeFor(path), data);
-            // Aggressive HTTP-cache so iOS PWAs (added to Home Screen) keep the shell on
-            // disk and survive a flat connection. Hashed assets under /assets/ have the
-            // bundle hash baked into their filename (e.g. index-Bf70jWtl.js), so they
-            // can be `immutable` for a year. index.html / manifest / icons rotate on
-            // rebuild but their content hash is stable per build, so a one-day max-age
-            // gives a fresh check on the next cold cache day without thrashing.
             if (path.startsWith("assets/")) {
                 r.addHeader("Cache-Control", "public, max-age=31536000, immutable");
-            } else if (path.equals("index.html") || path.endsWith(".webmanifest")
-                    || path.endsWith(".png") || path.endsWith(".svg")) {
+            } else if (path.equals("index.html") || path.isEmpty()) {
+                r.addHeader("Cache-Control", "no-cache, must-revalidate");
+            } else if (path.endsWith(".webmanifest") || path.endsWith(".png") || path.endsWith(".svg")) {
                 r.addHeader("Cache-Control", "public, max-age=86400");
             }
             return r;
         } catch (IOException e) {
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found");
+            return json(Response.Status.NOT_FOUND, errJson("not_found", "Asset not found: " + path));
         }
     }
 
