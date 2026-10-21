@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import XgimiEntity
@@ -60,8 +61,11 @@ class XgimiInputSourceSelect(XgimiEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Switch input source."""
         api_val = INPUT_TO_API.get(option)
-        if api_val:
-            await self.coordinator.async_post_json("/api/input", {"to": api_val})
+        if not api_val:
+            raise HomeAssistantError(f"Unknown input source option: {option}")
+        ok = await self.coordinator.async_post_json("/api/input", {"to": api_val})
+        if not ok:
+            raise HomeAssistantError(f"Failed to switch input source to {option}")
 
 
 class XgimiPresetSelect(XgimiEntity, SelectEntity):
@@ -92,15 +96,23 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Apply selected preset."""
         presets = self.coordinator.data.get("presets", [])
+        matched = False
         for p in presets:
             if isinstance(p, dict) and p.get("name") == option:
+                matched = True
                 preset_id = p.get("id")
-                if preset_id and await self.coordinator.async_post_json(
+                if not preset_id:
+                    raise HomeAssistantError(f"Preset {option} has no id")
+                ok = await self.coordinator.async_post_json(
                     f"/api/presets/{preset_id}/apply"
-                ):
-                    self._current_preset_name = option
-                    self.async_write_ha_state()
+                )
+                if not ok:
+                    raise HomeAssistantError(f"Failed to apply preset {option}")
+                self._current_preset_name = option
+                self.async_write_ha_state()
                 break
+        if not matched:
+            raise HomeAssistantError(f"Preset not found: {option}")
 
 
 class XgimiPictureModeSelect(XgimiEntity, SelectEntity):
@@ -123,10 +135,13 @@ class XgimiPictureModeSelect(XgimiEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Set picture mode."""
         val = PICTURE_MODE_REV.get(option)
-        if val is not None:
-            await self.coordinator.async_post_json(
-                "/api/picture/picture-mode", {"value": val}
-            )
+        if val is None:
+            raise HomeAssistantError(f"Unknown picture mode: {option}")
+        ok = await self.coordinator.async_post_json(
+            "/api/picture/picture-mode", {"value": val}
+        )
+        if not ok:
+            raise HomeAssistantError(f"Failed to set picture mode to {option}")
 
 
 class XgimiColorTempSelect(XgimiEntity, SelectEntity):
@@ -149,10 +164,13 @@ class XgimiColorTempSelect(XgimiEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Set color temperature."""
         val = COLOR_TEMP_REV.get(option)
-        if val is not None:
-            await self.coordinator.async_post_json(
-                "/api/picture/color-temp", {"value": val}
-            )
+        if val is None:
+            raise HomeAssistantError(f"Unknown color temperature: {option}")
+        ok = await self.coordinator.async_post_json(
+            "/api/picture/color-temp", {"value": val}
+        )
+        if not ok:
+            raise HomeAssistantError(f"Failed to set color temperature to {option}")
 
 
 class XgimiGameModeSelect(XgimiEntity, SelectEntity):
@@ -175,7 +193,10 @@ class XgimiGameModeSelect(XgimiEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Set game mode."""
         val = GAME_MODE_REV.get(option)
-        if val is not None:
-            await self.coordinator.async_post_json(
-                "/api/picture/game-mode", {"value": val}
-            )
+        if val is None:
+            raise HomeAssistantError(f"Unknown game mode: {option}")
+        ok = await self.coordinator.async_post_json(
+            "/api/picture/game-mode", {"value": val}
+        )
+        if not ok:
+            raise HomeAssistantError(f"Failed to set game mode to {option}")

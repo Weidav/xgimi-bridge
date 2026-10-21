@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import XgimiEntity
@@ -60,7 +61,9 @@ class XgimiSlider(XgimiEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value on the projector."""
         int_val = round(value)
-        await self.coordinator.async_post_json(
+        ok = await self.coordinator.async_post_json(
             f"/api/picture/{self._endpoint}",
             {"value": int_val},
         )
+        if not ok:
+            raise HomeAssistantError(f"Failed to set {self.name} to {int_val}")

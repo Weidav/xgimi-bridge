@@ -3,7 +3,7 @@
 DOMAIN = "xgimi_bridge"
 
 CONF_HOST = "host"
-DEFAULT_HOST = "192.168.3.17"
+DEFAULT_HOST = "127.0.0.1"
 DEFAULT_NAME = "XGIMI Horizon 20"
 
 DEFAULT_PORT = 8080

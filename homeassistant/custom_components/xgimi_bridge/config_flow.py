@@ -16,6 +16,14 @@ from .const import CONF_HOST, DEFAULT_HOST, DEFAULT_NAME, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+def _validate_host(host: str) -> bool:
+    """Validate configured host as hostname or IP literal without scheme, path or userinfo."""
+    if not host or not host.strip():
+        return False
+    h = host.strip()
+    return not ("://" in h or "/" in h or "@" in h or "?" in h or "#" in h or " " in h)
+
+
 class XgimiBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for XGIMI Bridge."""
 
@@ -31,16 +39,19 @@ class XgimiBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_HOST].strip()
             name = user_input.get(CONF_NAME, DEFAULT_NAME).strip()
 
-            await self.async_set_unique_id(host)
-            self._abort_if_unique_id_configured()
+            if not _validate_host(host):
+                errors[CONF_HOST] = "invalid_host"
+            else:
+                await self.async_set_unique_id(host)
+                self._abort_if_unique_id_configured()
 
-            return self.async_create_entry(
-                title=name,
-                data={
-                    CONF_HOST: host,
-                    CONF_NAME: name,
-                },
-            )
+                return self.async_create_entry(
+                    title=name,
+                    data={
+                        CONF_HOST: host,
+                        CONF_NAME: name,
+                    },
+                )
 
         schema = vol.Schema(
             {
@@ -61,27 +72,27 @@ class XgimiBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return XgimiOptionsFlowHandler(config_entry)
+        return XgimiOptionsFlowHandler()
 
 
 class XgimiOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for XGIMI Bridge."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             new_host = user_input[CONF_HOST].strip()
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data={**self.config_entry.data, CONF_HOST: new_host},
-            )
-            return self.async_create_entry(title="", data={})
+            if not _validate_host(new_host):
+                errors[CONF_HOST] = "invalid_host"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data={**self.config_entry.data, CONF_HOST: new_host},
+                )
+                return self.async_create_entry(title="", data={})
 
         current_host = self.config_entry.data.get(CONF_HOST, DEFAULT_HOST)
         return self.async_show_form(
@@ -91,4 +102,5 @@ class XgimiOptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required(CONF_HOST, default=current_host): str,
                 }
             ),
+            errors=errors,
         )

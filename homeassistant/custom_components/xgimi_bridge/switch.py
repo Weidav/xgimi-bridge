@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import XgimiEntity
@@ -41,8 +42,12 @@ class XgimiPowerSwitch(XgimiEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the projector."""
-        await self.coordinator.async_turn_on()
+        ok = await self.coordinator.async_turn_on()
+        if not ok:
+            raise HomeAssistantError(f"Failed to turn on {self.name}")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the projector."""
-        await self.coordinator.async_turn_off()
+        ok = await self.coordinator.async_turn_off()
+        if not ok:
+            raise HomeAssistantError(f"Failed to turn off {self.name}")

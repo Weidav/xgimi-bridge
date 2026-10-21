@@ -31,7 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data.get(CONF_HOST, DEFAULT_HOST)
     name = entry.data.get(CONF_NAME, DEFAULT_NAME)
 
-    coordinator = XgimiDataUpdateCoordinator(hass, host, name)
+    coordinator = XgimiDataUpdateCoordinator(hass, host, name, config_entry=entry)
     coordinator.config_entry_id = entry.entry_id
 
     # Refresh data, but do not fail setup if projector is off in standby
@@ -53,7 +53,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        coordinator = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if coordinator:
+            await coordinator.async_unload()
     return unload_ok
 
 
@@ -84,5 +86,5 @@ class XgimiEntity(CoordinatorEntity[XgimiDataUpdateCoordinator]):
             manufacturer="XGIMI",
             model="Horizon 20 (XR14A)",
             sw_version="Android 14",
-            configuration_url=f"http://{self.coordinator.host}:{DEFAULT_PORT}",
+            configuration_url=f"http://{self.coordinator.formatted_host}:{DEFAULT_PORT}",
         )

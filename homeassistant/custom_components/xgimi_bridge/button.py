@@ -6,6 +6,7 @@ from homeassistant.components.button import ButtonDeviceClass, ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import XgimiEntity
@@ -68,7 +69,9 @@ class XgimiKeyButton(XgimiEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Handle button press."""
-        await self.coordinator.async_inject_key(self._key_code)
+        ok = await self.coordinator.async_inject_key(self._key_code)
+        if not ok:
+            raise HomeAssistantError(f"Failed to inject key {self._key_code} on {self.name}")
 
 
 class XgimiPowerActionButton(XgimiEntity, ButtonEntity):
@@ -90,7 +93,9 @@ class XgimiPowerActionButton(XgimiEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Handle button press."""
-        await self.coordinator.async_post_json(f"/api/power/{self._action}")
+        ok = await self.coordinator.async_post_json(f"/api/power/{self._action}")
+        if not ok:
+            raise HomeAssistantError(f"Power action {self._action} failed on {self.name}")
 
 
 class XgimiRestartButton(XgimiEntity, ButtonEntity):
@@ -107,4 +112,6 @@ class XgimiRestartButton(XgimiEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Reboot projector."""
-        await self.coordinator.async_post_json("/api/power/restart")
+        ok = await self.coordinator.async_post_json("/api/power/restart")
+        if not ok:
+            raise HomeAssistantError(f"Restart failed on {self.name}")
