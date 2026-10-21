@@ -62,8 +62,8 @@ public class LocalAdbClient {
     private static final int MAX_PAYLOAD = 256 * 1024;
 
     private final Context ctx;
-    private RSAPrivateKey privateKey;
-    private RSAPublicKey publicKey;
+    private volatile RSAPrivateKey privateKey;
+    private volatile RSAPublicKey publicKey;
 
     /** Guards the keypair fields + on-disk key generation. Coarse but only contended on the
      *  very first call after a fresh install. */
@@ -76,11 +76,11 @@ public class LocalAdbClient {
     private final Object dispatcherLock = new Object();
 
     // Persistent connection + dispatcher stream.
-    private Socket dispSock;
-    private DataInputStream dispIn;
-    private OutputStream dispOut;
-    private int dispLocalId = -1;
-    private int dispRemoteId = -1;
+    private volatile Socket dispSock;
+    private volatile DataInputStream dispIn;
+    private volatile OutputStream dispOut;
+    private volatile int dispLocalId = -1;
+    private volatile int dispRemoteId = -1;
     /** Carry-over text from previous packets — adbd may bundle multiple {@code OK N\n} lines
      *  into one A_WRTE; without preserving the tail we'd return a stale OK on the next call. */
     private final StringBuilder dispBuf = new StringBuilder();
@@ -91,7 +91,9 @@ public class LocalAdbClient {
      * to start KeyDispatcher so subsequent key events and the wake listener are ready immediately.
      */
     public void warmUpAsync() {
-        if (dispSock != null && !dispSock.isClosed() && dispLocalId > 0) return;
+        synchronized (dispatcherLock) {
+            if (dispSock != null && !dispSock.isClosed() && dispLocalId > 0) return;
+        }
         if (!warmingUp.compareAndSet(false, true)) return;
         Thread t = new Thread(new Runnable() {
             @Override
@@ -257,7 +259,9 @@ public class LocalAdbClient {
     private void ensureDispatcher() throws Exception {
         if (dispSock != null && !dispSock.isClosed() && dispLocalId > 0) return;
 
-        ensureKey();
+        synchronized (keyLock) {
+            ensureKey();
+        }
         Socket s = new Socket();
         try {
             s.connect(new InetSocketAddress("127.0.0.1", 5555), 3000);
@@ -293,6 +297,27 @@ public class LocalAdbClient {
                         dispLocalId = localId;
                         dispRemoteId = remoteId;
                         Log.i(TAG, "LocalAdbClient: KeyDispatcher READY (apk=" + apkPath + ")");
+
+                        // Send configured aliases over stdin
+                        try {
+                            RequestPolicy policy = new RequestPolicy(ctx.getFilesDir());
+                            java.util.Set<String> aliases = policy.getAliases();
+                            if (!aliases.isEmpty()) {
+                                StringBuilder sb = new StringBuilder("ALIASES ");
+                                boolean first = true;
+                                for (String a : aliases) {
+                                    if (!first) sb.append(",");
+                                    sb.append(a);
+                                    first = false;
+                                }
+                                sb.append("\n");
+                                byte[] aliasPayload = sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                                writePacket(out, A_WRTE, localId, remoteId, aliasPayload);
+                            }
+                        } catch (Throwable t) {
+                            Log.w(TAG, "Failed sending aliases to KeyDispatcher: " + t.getMessage());
+                        }
+
                         return;
                     }
                     if (banner.indexOf("FATAL") >= 0) {
@@ -370,21 +395,51 @@ public class LocalAdbClient {
         File priv = new File(ctx.getFilesDir(), "adb_key.pkcs8");
         File pub = new File(ctx.getFilesDir(), "adb_key.x509");
         if (priv.exists() && pub.exists()) {
-            byte[] pkBytes = readFile(priv);
-            byte[] pubBytes = readFile(pub);
-            KeyFactory kf = KeyFactory.getInstance("RSA");
-            privateKey = (RSAPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(pkBytes));
-            publicKey = (RSAPublicKey) kf.generatePublic(new X509EncodedKeySpec(pubBytes));
-            return;
+            try {
+                byte[] pkBytes = readFile(priv);
+                byte[] pubBytes = readFile(pub);
+                KeyFactory kf = KeyFactory.getInstance("RSA");
+                RSAPrivateKey privCandidate = (RSAPrivateKey) kf.generatePrivate(new PKCS8EncodedKeySpec(pkBytes));
+                RSAPublicKey pubCandidate = (RSAPublicKey) kf.generatePublic(new X509EncodedKeySpec(pubBytes));
+                if (validateKeyPair(privCandidate, pubCandidate)) {
+                    privateKey = privCandidate;
+                    publicKey = pubCandidate;
+                    return;
+                }
+                Log.w(TAG, "Stored ADB key pair invalid or mismatched; regenerating");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed reading stored ADB keys: " + e.getMessage() + "; regenerating");
+            }
         }
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
         kpg.initialize(2048);
         KeyPair kp = kpg.generateKeyPair();
-        privateKey = (RSAPrivateKey) kp.getPrivate();
-        publicKey = (RSAPublicKey) kp.getPublic();
-        writeFile(priv, privateKey.getEncoded());
-        writeFile(pub, publicKey.getEncoded());
-        Log.i(TAG, "LocalAdbClient: generated new RSA-2048 ADB key");
+        RSAPrivateKey newPriv = (RSAPrivateKey) kp.getPrivate();
+        RSAPublicKey newPub = (RSAPublicKey) kp.getPublic();
+
+        if (!validateKeyPair(newPriv, newPub)) {
+            throw new IllegalStateException("Generated ADB keypair failed validation");
+        }
+
+        File tmpPriv = new File(ctx.getFilesDir(), "adb_key.pkcs8.tmp");
+        File tmpPub = new File(ctx.getFilesDir(), "adb_key.x509.tmp");
+        writeFile(tmpPriv, newPriv.getEncoded());
+        writeFile(tmpPub, newPub.getEncoded());
+        if (!tmpPriv.renameTo(priv) || !tmpPub.renameTo(pub)) {
+            tmpPriv.delete();
+            tmpPub.delete();
+            writeFile(priv, newPriv.getEncoded());
+            writeFile(pub, newPub.getEncoded());
+        }
+
+        privateKey = newPriv;
+        publicKey = newPub;
+        Log.i(TAG, "LocalAdbClient: generated and stored new RSA-2048 ADB keypair");
+    }
+
+    private static boolean validateKeyPair(RSAPrivateKey priv, RSAPublicKey pub) {
+        if (priv == null || pub == null) return false;
+        return priv.getModulus().equals(pub.getModulus());
     }
 
     // ---- Wire ----

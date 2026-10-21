@@ -24,6 +24,8 @@ public class BridgeService extends Service {
     private PresetStore presets;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
+    private volatile boolean isDestroyed = false;
+    private Thread startRetryThread;
 
     @Override
     public void onCreate() {
@@ -36,24 +38,70 @@ public class BridgeService extends Service {
         aidl.connect();
 
         presets = new PresetStore(this, aidl);
-
         try {
-            server = new HttpServer(this, HTTP_PORT, aidl, presets);
-            server.start();
-            Log.i(TAG, "HTTP server started on :" + HTTP_PORT);
-        } catch (IOException e) {
-            Log.e(TAG, "failed to start http", e);
+            presets.initialize();
+        } catch (Throwable t) {
+            Log.e(TAG, "PresetStore initialization failed", t);
         }
+
+        server = new HttpServer(this, HTTP_PORT, aidl, presets);
+        startServerWithBackoff();
     }
 
-    @Override public int onStartCommand(Intent i, int f, int s) { return START_STICKY; }
-    @Override public IBinder onBind(Intent i) { return null; }
+    private void startServerWithBackoff() {
+        final int[] backoffsSeconds = {1, 2, 4, 8, 16, 30};
+        startRetryThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int attempt = 0;
+                while (!isDestroyed) {
+                    try {
+                        server.start();
+                        Log.i(TAG, "HTTP server started on :" + HTTP_PORT);
+                        return;
+                    } catch (IOException e) {
+                        int delaySec = attempt < backoffsSeconds.length ? backoffsSeconds[attempt] : 30;
+                        attempt++;
+                        Log.w(TAG, "Failed to start HTTP server (attempt " + attempt + "): " + e.getMessage() + ". Retrying in " + delaySec + "s");
+                        try {
+                            server.stop();
+                        } catch (Throwable ignored) {}
+                        try {
+                            Thread.sleep(delaySec * 1000L);
+                        } catch (InterruptedException ie) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }, "BridgeService-ServerStarter");
+        startRetryThread.setDaemon(true);
+        startRetryThread.start();
+    }
+
+    @Override
+    public int onStartCommand(Intent i, int f, int s) {
+        return START_STICKY;
+    }
+
+    @Override
+    public IBinder onBind(Intent i) {
+        return null;
+    }
 
     @Override
     public void onDestroy() {
         Log.i(TAG, "service onDestroy");
-        if (server != null) server.stop();
-        if (aidl != null) aidl.disconnect();
+        isDestroyed = true;
+        if (startRetryThread != null) {
+            startRetryThread.interrupt();
+        }
+        if (server != null) {
+            server.stop();
+        }
+        if (aidl != null) {
+            aidl.disconnect();
+        }
         releaseLocks();
         super.onDestroy();
     }
@@ -84,8 +132,12 @@ public class BridgeService extends Service {
     }
 
     private void releaseLocks() {
-        try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Throwable t) {}
-        try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Throwable t) {}
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        } catch (Throwable ignored) {}
+        try {
+            if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+        } catch (Throwable ignored) {}
     }
 
     private void startInForeground() {

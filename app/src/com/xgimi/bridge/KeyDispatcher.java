@@ -30,7 +30,62 @@ public class KeyDispatcher {
     private static final Object LOCK = new Object();
     private static final int INJECT_MODE_ASYNC = 0;
 
+    public static class WakeHttpServer extends MiniHttp {
+        private final Object im;
+        private final java.lang.reflect.Method injectInputEvent;
+        private final RequestPolicy policy;
+
+        public WakeHttpServer(Object im, java.lang.reflect.Method injectInputEvent, RequestPolicy policy) {
+            super(WAKE_PORT, Limits.forPort8081());
+            this.im = im;
+            this.injectInputEvent = injectInputEvent;
+            this.policy = policy;
+        }
+
+        @Override
+        protected Response serve(Request req) {
+            String host = req.headers.get("host");
+            if (!policy.isHostAllowed(host, WAKE_PORT)) {
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"request_forbidden\",\"error\":\"Host forbidden\"}");
+            }
+
+            String origin = req.headers.get("origin");
+            if (!policy.isOriginAllowed(origin, WAKE_PORT, true)) {
+                return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"request_forbidden\",\"error\":\"Origin forbidden\"}");
+            }
+
+            if (!"/wake".equals(req.uri)) {
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"not_found\",\"error\":\"Not found\"}");
+            }
+
+            if (req.method != MiniHttp.Method.POST) {
+                Response r = newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"method_not_allowed\",\"error\":\"Method not allowed\"}");
+                r.addHeader("Allow", "POST");
+                return r;
+            }
+
+            if (req.body != null && req.body.length > 0) {
+                return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"invalid_request\",\"error\":\"Wake endpoint expects empty body\"}");
+            }
+
+            try {
+                dispatchKey(im, injectInputEvent, KeyEvent.KEYCODE_WAKEUP);
+                return newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8",
+                        "{\"ok\":true,\"action\":\"wake\"}");
+            } catch (Throwable t) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8",
+                        "{\"ok\":false,\"code\":\"internal_error\",\"error\":\"Wake injection failed: " + t.getMessage() + "\"}");
+            }
+        }
+    }
+
     public static void main(String[] args) {
+        WakeHttpServer wakeServer = null;
         try {
             Class<?> imClass = Class.forName("android.hardware.input.InputManagerGlobal");
             Method getInstance = imClass.getMethod("getInstance");
@@ -40,7 +95,9 @@ public class KeyDispatcher {
                     Class.forName("android.view.InputEvent"),
                     int.class);
 
-            startWakeServer(im, injectInputEvent);
+            RequestPolicy policy = new RequestPolicy();
+            wakeServer = new WakeHttpServer(im, injectInputEvent, policy);
+            wakeServer.start();
 
             System.out.println("READY");
             System.out.flush();
@@ -51,6 +108,17 @@ public class KeyDispatcher {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 try {
+                    if (line.startsWith("ALIASES ")) {
+                        String aliasStr = line.substring(8).trim();
+                        java.util.List<String> raw = new java.util.ArrayList<>();
+                        for (String a : aliasStr.split(",")) {
+                            raw.add(a.trim());
+                        }
+                        policy.setAliases(raw);
+                        System.out.println("OK ALIASES");
+                        System.out.flush();
+                        continue;
+                    }
                     if (line.equals("INFO")) {
                         JSONObject info = collectHardwareInfo();
                         System.out.println("OK INFO " + info.toString());
@@ -60,6 +128,7 @@ public class KeyDispatcher {
                     if (line.startsWith("TEXT ")) {
                         byte[] raw = Base64.decode(line.substring(5).trim(), Base64.DEFAULT);
                         String text = new String(raw, "UTF-8");
+                        SettingRules.validateText(text);
                         KeyCharacterMap kcm = KeyCharacterMap.load(KeyCharacterMapSource());
                         KeyEvent[] events = kcm.getEvents(text.toCharArray());
                         if (events == null) {
@@ -76,6 +145,7 @@ public class KeyDispatcher {
                         continue;
                     }
                     int code = Integer.parseInt(line);
+                    SettingRules.validateKeyCode(code);
                     dispatchKey(im, injectInputEvent, code);
                     System.out.println("OK " + code);
                 } catch (Exception e) {
@@ -88,6 +158,10 @@ public class KeyDispatcher {
             t.printStackTrace(System.out);
             System.out.flush();
             System.exit(1);
+        } finally {
+            if (wakeServer != null) {
+                wakeServer.stop();
+            }
         }
     }
 
@@ -103,44 +177,6 @@ public class KeyDispatcher {
             injectInputEvent.invoke(im, down, INJECT_MODE_ASYNC);
             injectInputEvent.invoke(im, up, INJECT_MODE_ASYNC);
         }
-    }
-
-    private static void startWakeServer(final Object im, final Method injectInputEvent) {
-        Thread t = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                java.net.ServerSocket ss = null;
-                try {
-                    ss = new java.net.ServerSocket();
-                    ss.setReuseAddress(true);
-                    ss.bind(new java.net.InetSocketAddress(WAKE_PORT));
-                    while (true) {
-                        final java.net.Socket s = ss.accept();
-                        try {
-                            s.setSoTimeout(2000);
-                            dispatchKey(im, injectInputEvent, KeyEvent.KEYCODE_WAKEUP);
-                            java.io.OutputStream out = s.getOutputStream();
-                            String body = "{\"ok\":true,\"action\":\"wake\"}";
-                            String resp = "HTTP/1.1 200 OK\r\n"
-                                    + "Content-Type: application/json\r\n"
-                                    + "Content-Length: " + body.length() + "\r\n"
-                                    + "Connection: close\r\n\r\n"
-                                    + body;
-                            out.write(resp.getBytes("UTF-8"));
-                            out.flush();
-                        } catch (Throwable ignore) {
-                        } finally {
-                            try { s.close(); } catch (Throwable ignore) {}
-                        }
-                    }
-                } catch (Throwable ignore) {
-                } finally {
-                    if (ss != null) try { ss.close(); } catch (Throwable ignore) {}
-                }
-            }
-        }, "KeyDispatcher-Wake");
-        t.setDaemon(true);
-        t.start();
     }
 
     private static int KeyCharacterMapSource() {
