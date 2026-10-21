@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -19,14 +20,17 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -34,7 +38,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Lightweight, zero-dependency HTTP/1.1 server built on standard java.net.ServerSocket.
+ * Hardened, zero-dependency HTTP/1.1 server built on standard java.net.ServerSocket.
+ * Enforces strict RFC 9112 framing, absolute monotonic deadlines, safe arithmetic on chunks,
+ * per-peer and global admission limits, and write watchdogs.
  */
 public abstract class MiniHttp {
     private static final String TAG = "XgimiBridge";
@@ -43,17 +49,70 @@ public abstract class MiniHttp {
         GET, POST, PUT, DELETE, HEAD, OPTIONS, UNKNOWN
     }
 
+    public static class Limits {
+        public int maxRequestLineBytes = 4096;
+        public int maxHeaderLineBytes = 4096;
+        public int maxHeadersAggregateBytes = 16384;
+        public int maxHeaderCount = 64;
+        public int maxBodyBytes = 65536;
+        public int maxChunkSizeLineBytes = 128;
+        public int maxTrailerBytes = 4096;
+        public int maxTrailerCount = 16;
+        public long headerReadDeadlineMs = 5000;
+        public long requestReadDeadlineMs = 10000;
+        public long responseWriteDeadlineMs = 5000;
+        public long idleKeepAliveMs = 2000;
+        public int maxRequestsPerConnection = 100;
+        public int maxActiveConnections = 64;
+        public int maxActivePerPeer = 8;
+        public boolean allowChunked = true;
+        public boolean allowTrailers = true;
+        public boolean closeAfterResponse = false;
+
+        public static Limits forPort8080() {
+            return new Limits();
+        }
+
+        public static Limits forPort8081() {
+            Limits l = new Limits();
+            l.maxRequestLineBytes = 512;
+            l.maxHeaderLineBytes = 1024;
+            l.maxHeadersAggregateBytes = 4096;
+            l.maxHeaderCount = 16;
+            l.maxBodyBytes = 0;
+            l.maxChunkSizeLineBytes = 0;
+            l.maxTrailerBytes = 0;
+            l.maxTrailerCount = 0;
+            l.headerReadDeadlineMs = 1000;
+            l.requestReadDeadlineMs = 1000;
+            l.responseWriteDeadlineMs = 1000;
+            l.idleKeepAliveMs = 0;
+            l.maxRequestsPerConnection = 1;
+            l.maxActiveConnections = 8;
+            l.maxActivePerPeer = 2;
+            l.allowChunked = false;
+            l.allowTrailers = false;
+            l.closeAfterResponse = true;
+            return l;
+        }
+    }
+
     public static final class Response {
         public enum Status {
             OK(200, "OK"),
+            ACCEPTED(202, "Accepted"),
             BAD_REQUEST(400, "Bad Request"),
             FORBIDDEN(403, "Forbidden"),
             NOT_FOUND(404, "Not Found"),
             METHOD_NOT_ALLOWED(405, "Method Not Allowed"),
+            REQUEST_TIMEOUT(408, "Request Timeout"),
             PAYLOAD_TOO_LARGE(413, "Payload Too Large"),
+            UNSUPPORTED_MEDIA_TYPE(415, "Unsupported Media Type"),
             INTERNAL_ERROR(500, "Internal Server Error"),
             NOT_IMPLEMENTED(501, "Not Implemented"),
-            SERVICE_UNAVAILABLE(503, "Service Unavailable");
+            BAD_GATEWAY(502, "Bad Gateway"),
+            SERVICE_UNAVAILABLE(503, "Service Unavailable"),
+            GATEWAY_TIMEOUT(504, "Gateway Timeout");
 
             public final int code;
             public final String description;
@@ -111,18 +170,17 @@ public abstract class MiniHttp {
         public final Map<String, String> parms;
         public final Map<String, String> headers;
         public final byte[] body;
+        public final InetAddress remoteAddress;
 
-        public Request(Method method, String uri, String query, Map<String, String> parms, Map<String, String> headers, byte[] body) {
+        public Request(Method method, String uri, String query, Map<String, String> parms,
+                       Map<String, String> headers, byte[] body, InetAddress remoteAddress) {
             this.method = method;
             this.uri = uri;
             this.query = query;
             this.parms = parms != null ? parms : Collections.<String, String>emptyMap();
             this.headers = headers != null ? headers : Collections.<String, String>emptyMap();
             this.body = body != null ? body : new byte[0];
-        }
-
-        public Request(Method method, String uri, Map<String, String> headers, byte[] body) {
-            this(method, uri, null, Collections.<String, String>emptyMap(), headers, body);
+            this.remoteAddress = remoteAddress;
         }
 
         public Method getMethod() {
@@ -148,14 +206,23 @@ public abstract class MiniHttp {
         public byte[] getBody() {
             return body;
         }
+
+        public InetAddress getRemoteAddress() {
+            return remoteAddress;
+        }
     }
 
     private final int port;
+    protected final Limits limits;
     private ServerSocket serverSocket;
     private Thread acceptThread;
-    private ExecutorService executor;
+    private ThreadPoolExecutor executor;
+    private ScheduledExecutorService watchdogService;
     private volatile boolean running = false;
+
     private final Set<Socket> openSockets = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
+    private final AtomicInteger activeConnections = new AtomicInteger(0);
+    private final ConcurrentHashMap<InetAddress, AtomicInteger> peerConnections = new ConcurrentHashMap<>();
 
     private static final ThreadLocal<SimpleDateFormat> RFC1123 = new ThreadLocal<SimpleDateFormat>() {
         @Override
@@ -167,7 +234,12 @@ public abstract class MiniHttp {
     };
 
     protected MiniHttp(int port) {
+        this(port, Limits.forPort8080());
+    }
+
+    protected MiniHttp(int port, Limits limits) {
         this.port = port;
+        this.limits = limits != null ? limits : Limits.forPort8080();
     }
 
     public synchronized void start() throws IOException {
@@ -179,25 +251,34 @@ public abstract class MiniHttp {
         running = true;
 
         executor = new ThreadPoolExecutor(
-            4, 64, 30L, TimeUnit.SECONDS,
+            2, limits.maxActiveConnections, 30L, TimeUnit.SECONDS,
             new SynchronousQueue<Runnable>(),
             new ThreadFactory() {
                 private final AtomicInteger count = new AtomicInteger(1);
                 @Override
                 public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "MiniHttp-Worker-" + count.getAndIncrement());
+                    Thread t = new Thread(r, "MiniHttp-" + port + "-Worker-" + count.getAndIncrement());
                     t.setDaemon(true);
                     return t;
                 }
             }
         );
 
+        watchdogService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r, "MiniHttp-" + port + "-Watchdog");
+                t.setDaemon(true);
+                return t;
+            }
+        });
+
         acceptThread = new Thread(new Runnable() {
             @Override
             public void run() {
                 acceptLoop();
             }
-        }, "MiniHttp-Accept");
+        }, "MiniHttp-" + port + "-Accept");
         acceptThread.setDaemon(true);
         acceptThread.start();
     }
@@ -213,7 +294,12 @@ public abstract class MiniHttp {
             closeQuietly(s);
         }
         openSockets.clear();
+        peerConnections.clear();
+        activeConnections.set(0);
 
+        if (watchdogService != null) {
+            watchdogService.shutdownNow();
+        }
         if (executor != null) {
             executor.shutdownNow();
         }
@@ -234,6 +320,31 @@ public abstract class MiniHttp {
         while (running) {
             try {
                 final Socket socket = serverSocket.accept();
+                final InetAddress peer = socket.getInetAddress();
+
+                // Admission control: global ceiling
+                int currentGlobal = activeConnections.incrementAndGet();
+                if (currentGlobal > limits.maxActiveConnections) {
+                    activeConnections.decrementAndGet();
+                    sendOverloadAndClose(socket, "Global connection limit exceeded");
+                    continue;
+                }
+
+                // Admission control: per-peer limit
+                AtomicInteger peerCounter = peerConnections.computeIfAbsent(peer, new java.util.function.Function<InetAddress, AtomicInteger>() {
+                    @Override
+                    public AtomicInteger apply(InetAddress k) {
+                        return new AtomicInteger(0);
+                    }
+                });
+                int currentPeer = peerCounter.incrementAndGet();
+                if (currentPeer > limits.maxActivePerPeer) {
+                    peerCounter.decrementAndGet();
+                    activeConnections.decrementAndGet();
+                    sendOverloadAndClose(socket, "Per-peer connection limit exceeded");
+                    continue;
+                }
+
                 openSockets.add(socket);
                 try {
                     executor.execute(new Runnable() {
@@ -243,20 +354,34 @@ public abstract class MiniHttp {
                                 handleConnection(socket);
                             } finally {
                                 openSockets.remove(socket);
+                                AtomicInteger pc = peerConnections.get(peer);
+                                if (pc != null) {
+                                    if (pc.decrementAndGet() <= 0) {
+                                        peerConnections.remove(peer, pc);
+                                    }
+                                }
+                                activeConnections.decrementAndGet();
                                 closeQuietly(socket);
                             }
                         }
                     });
                 } catch (RejectedExecutionException ree) {
                     openSockets.remove(socket);
-                    sendOverloadedError(socket);
+                    AtomicInteger pc = peerConnections.get(peer);
+                    if (pc != null) {
+                        if (pc.decrementAndGet() <= 0) {
+                            peerConnections.remove(peer, pc);
+                        }
+                    }
+                    activeConnections.decrementAndGet();
+                    sendOverloadAndClose(socket, "Server worker pool saturated");
                 }
             } catch (SocketException se) {
                 if (!running) break;
-                Log.w(TAG, "MiniHttp accept socket error", se);
+                Log.w(TAG, "MiniHttp accept socket error: " + se.getMessage());
             } catch (IOException ie) {
                 if (!running) break;
-                Log.w(TAG, "MiniHttp accept IO error", ie);
+                Log.w(TAG, "MiniHttp accept IO error: " + ie.getMessage());
             } catch (Throwable t) {
                 if (!running) break;
                 Log.e(TAG, "MiniHttp accept unexpected error", t);
@@ -266,60 +391,80 @@ public abstract class MiniHttp {
 
     private void handleConnection(Socket socket) {
         try {
-            socket.setSoTimeout(5000);
             InputStream in = new BufferedInputStream(socket.getInputStream(), 8192);
             OutputStream out = new BufferedOutputStream(socket.getOutputStream(), 8192);
             ByteArrayOutputStream lineBuf = new ByteArrayOutputStream(256);
+            int requestCount = 0;
 
             while (running && !socket.isClosed()) {
-                String requestLine = null;
-                try {
-                    requestLine = readLine(in, lineBuf, 4096);
-                } catch (SocketTimeoutException te) {
-                    // Normal keep-alive idle timeout
-                    break;
-                } catch (IOException ie) {
-                    sendError(out, Response.Status.BAD_REQUEST, ie.getMessage());
+                requestCount++;
+                if (requestCount > limits.maxRequestsPerConnection) {
                     break;
                 }
+
+                long startNano = System.nanoTime();
+                long headerDeadlineNano = startNano + TimeUnit.MILLISECONDS.toNanos(limits.headerReadDeadlineMs);
+                long requestDeadlineNano = startNano + TimeUnit.MILLISECONDS.toNanos(limits.requestReadDeadlineMs);
+
+                // Read request line
+                String requestLine = null;
+                try {
+                    // Apply keep-alive idle timeout if this is not the first request
+                    if (requestCount > 1 && limits.idleKeepAliveMs > 0) {
+                        setSocketTimeoutSafe(socket, limits.idleKeepAliveMs);
+                    } else {
+                        applyDeadlineTimeout(socket, headerDeadlineNano);
+                    }
+                    requestLine = readLineStrict(in, lineBuf, limits.maxRequestLineBytes, socket, headerDeadlineNano);
+                } catch (SocketTimeoutException te) {
+                    if (requestCount > 1) {
+                        // Clean idle keep-alive timeout
+                        break;
+                    }
+                    sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Header read deadline exceeded");
+                    break;
+                } catch (IOException ie) {
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", ie.getMessage());
+                    break;
+                }
+
                 if (requestLine == null) {
                     // Clean EOF from client
                     break;
                 }
-                // Skip empty lines before request-line per RFC 7230 §3.5 (limit to 32)
+
+                // RFC 9112 §2.2: Skip up to 4 empty lines before request-line
                 int emptyCount = 0;
                 while (requestLine.isEmpty()) {
-                    if (++emptyCount > 32) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Too many empty lines");
-                        break;
+                    if (++emptyCount > 4) {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Too many leading empty lines");
+                        return;
                     }
                     try {
-                        requestLine = readLine(in, lineBuf, 4096);
+                        applyDeadlineTimeout(socket, headerDeadlineNano);
+                        requestLine = readLineStrict(in, lineBuf, limits.maxRequestLineBytes, socket, headerDeadlineNano);
                     } catch (SocketTimeoutException te) {
-                        break;
+                        sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Header read deadline exceeded");
+                        return;
                     } catch (IOException ie) {
-                        sendError(out, Response.Status.BAD_REQUEST, ie.getMessage());
-                        break;
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", ie.getMessage());
+                        return;
                     }
-                    if (requestLine == null) break;
+                    if (requestLine == null) return;
                 }
-                if (requestLine == null || requestLine.isEmpty()) break;
 
                 String[] parts = requestLine.split(" ");
                 if (parts.length != 3) {
-                    sendError(out, Response.Status.BAD_REQUEST, "Malformed request line");
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Malformed request line");
                     break;
                 }
 
                 String methodStr = parts[0];
                 String rawUri = parts[1];
                 String httpVersion = parts[2];
-                if (methodStr.isEmpty() || rawUri.isEmpty() || httpVersion.isEmpty()) {
-                    sendError(out, Response.Status.BAD_REQUEST, "Malformed request line");
-                    break;
-                }
-                if (!httpVersion.equals("HTTP/1.1") && !httpVersion.equals("HTTP/1.0")) {
-                    sendError(out, Response.Status.BAD_REQUEST, "Unsupported HTTP version: " + httpVersion);
+
+                if (!"HTTP/1.1".equals(httpVersion) && !"HTTP/1.0".equals(httpVersion)) {
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Unsupported HTTP version: " + httpVersion);
                     break;
                 }
 
@@ -330,15 +475,14 @@ public abstract class MiniHttp {
                     method = Method.UNKNOWN;
                 }
                 if (method == Method.UNKNOWN) {
-                    sendError(out, Response.Status.NOT_IMPLEMENTED, "Unsupported HTTP method: " + methodStr);
+                    sendError(out, Response.Status.NOT_IMPLEMENTED, "not_implemented", "Unsupported HTTP method: " + methodStr);
                     break;
                 }
 
-                // Strip authority if absolute URI (e.g. http://host:port/path)
-                if (rawUri.startsWith("http://") || rawUri.startsWith("https://")) {
-                    int schemeEnd = rawUri.indexOf("://") + 3;
-                    int slash = rawUri.indexOf('/', schemeEnd);
-                    rawUri = slash >= 0 ? rawUri.substring(slash) : "/";
+                // Rule 9: Reject absolute-form targets (e.g. http://host/path)
+                if (rawUri.startsWith("http://") || rawUri.startsWith("https://") || !rawUri.startsWith("/")) {
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Absolute-form and non-origin-form request targets not supported");
+                    break;
                 }
 
                 // Strip fragment
@@ -362,180 +506,294 @@ public abstract class MiniHttp {
                     decodedUri = "/" + decodedUri;
                 }
 
-                // Read headers (case-insensitive)
+                // Read headers
                 Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-                int totalHeaderBytes = requestLine.length();
+                Set<String> seenHeaderNames = new HashSet<>();
+                int totalHeaderBytes = requestLine.length() + 2; // include CRLF
+                int headerCount = 0;
                 boolean headerError = false;
-                String headerErrorMsg = "Error reading request headers";
+
                 while (true) {
+                    applyDeadlineTimeout(socket, headerDeadlineNano);
                     String headerLine;
                     try {
-                        headerLine = readLine(in, lineBuf, 4096);
+                        headerLine = readLineStrict(in, lineBuf, limits.maxHeaderLineBytes, socket, headerDeadlineNano);
                     } catch (SocketTimeoutException te) {
-                        headerError = true;
-                        headerErrorMsg = "Timeout reading request headers";
-                        break;
+                        sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Header read deadline exceeded");
+                        return;
                     } catch (IOException ie) {
-                        sendError(out, Response.Status.BAD_REQUEST, ie.getMessage());
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", ie.getMessage());
                         return;
                     }
+
                     if (headerLine == null) {
-                        headerError = true;
-                        headerErrorMsg = "Unexpected EOF in request headers";
-                        break;
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Unexpected EOF in request headers");
+                        return;
                     }
                     if (headerLine.isEmpty()) {
                         break; // End of headers
                     }
-                    totalHeaderBytes += headerLine.length();
-                    if (totalHeaderBytes > 16384) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Request headers too large");
+
+                    headerCount++;
+                    if (headerCount > limits.maxHeaderCount) {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Header count exceeded limit of " + limits.maxHeaderCount);
                         return;
                     }
+
+                    totalHeaderBytes += headerLine.length() + 2;
+                    if (totalHeaderBytes > limits.maxHeadersAggregateBytes) {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Aggregate headers exceeded limit of " + limits.maxHeadersAggregateBytes + " bytes");
+                        return;
+                    }
+
+                    // Strict header framing: reject obsolete folding (starts with space or tab)
+                    if (headerLine.charAt(0) == ' ' || headerLine.charAt(0) == '\t') {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Obsolete header line folding rejected");
+                        return;
+                    }
+
                     int colon = headerLine.indexOf(':');
-                    if (colon <= 0 || Character.isWhitespace(headerLine.charAt(0))) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Malformed header line");
+                    if (colon <= 0) {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Malformed header line");
                         return;
                     }
                     if (headerLine.charAt(colon - 1) == ' ' || headerLine.charAt(colon - 1) == '\t') {
-                        sendError(out, Response.Status.BAD_REQUEST, "Whitespace before colon in header name");
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Whitespace before colon in header name");
                         return;
                     }
-                    String k = headerLine.substring(0, colon).trim();
-                    String v = headerLine.substring(colon + 1).trim();
-                    headers.put(k, v);
+
+                    String headerName = headerLine.substring(0, colon).trim();
+                    String headerValue = headerLine.substring(colon + 1).trim();
+
+                    // Reject control characters in header name (< 0x20 or > 0x7E)
+                    for (int i = 0; i < headerName.length(); i++) {
+                        char c = headerName.charAt(i);
+                        if (c < 0x21 || c > 0x7E) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Control character in header name");
+                            return;
+                        }
+                    }
+
+                    // Reject control characters in header value (< 0x20 except 0x09 HTAB)
+                    for (int i = 0; i < headerValue.length(); i++) {
+                        char c = headerValue.charAt(i);
+                        if (c < 0x20 && c != 0x09) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Control character in header value");
+                            return;
+                        }
+                    }
+
+                    String lowerName = headerName.toLowerCase(Locale.US);
+                    // Rule 6: Reject duplicate Host, Origin, Content-Length and Transfer-Encoding
+                    if (lowerName.equals("host") || lowerName.equals("origin")
+                            || lowerName.equals("content-length") || lowerName.equals("transfer-encoding")) {
+                        if (seenHeaderNames.contains(lowerName)) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Duplicate " + headerName + " header rejected");
+                            return;
+                        }
+                    }
+                    seenHeaderNames.add(lowerName);
+                    headers.put(headerName, headerValue);
                 }
-                if (headerError) {
-                    sendError(out, Response.Status.BAD_REQUEST, headerErrorMsg);
+
+                // Rule 8: Mandatory single Host header for HTTP/1.1
+                String hostHeader = headers.get("host");
+                if ("HTTP/1.1".equals(httpVersion)) {
+                    if (hostHeader == null || hostHeader.trim().isEmpty()) {
+                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Host header required for HTTP/1.1");
+                        break;
+                    }
+                }
+
+                // Check Transfer-Encoding and Content-Length
+                String te = headers.get("transfer-encoding");
+                String cl = headers.get("content-length");
+                boolean isChunked = false;
+
+                if (te != null && cl != null) {
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Request cannot contain both Transfer-Encoding and Content-Length");
                     break;
                 }
 
-                // RFC 7230 §5.4: Host header is mandatory for HTTP/1.1
-                if ("HTTP/1.1".equals(httpVersion)) {
-                    String host = headers.get("host");
-                    if (host == null || host.trim().isEmpty()) {
-                        sendError(out, Response.Status.BAD_REQUEST, "Host header required for HTTP/1.1");
-                        break;
-                    }
-                }
-
-                // Check transfer encoding
-                String te = headers.get("transfer-encoding");
-                boolean isChunked = false;
-                if (te != null && !te.trim().isEmpty()) {
-                    if ("chunked".equalsIgnoreCase(te.trim())) {
+                if (te != null) {
+                    String teTrimmed = te.trim().toLowerCase(Locale.US);
+                    if ("chunked".equals(teTrimmed)) {
+                        if (!limits.allowChunked) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Chunked transfer encoding rejected on this port");
+                            break;
+                        }
                         isChunked = true;
                     } else {
-                        sendError(out, Response.Status.NOT_IMPLEMENTED, "Unsupported Transfer-Encoding: " + te);
+                        sendError(out, Response.Status.NOT_IMPLEMENTED, "not_implemented", "Unsupported Transfer-Encoding: " + te);
                         break;
                     }
                 }
 
-                // Read body
+                // Read request body under total request deadline
                 byte[] body;
                 if (isChunked) {
                     ByteArrayOutputStream bodyBuf = new ByteArrayOutputStream();
                     int totalChunkBytes = 0;
                     boolean chunkError = false;
+
                     while (true) {
-                        String hexLine;
+                        applyDeadlineTimeout(socket, requestDeadlineNano);
+                        String sizeLine;
                         try {
-                            hexLine = readLine(in, lineBuf, 128);
+                            sizeLine = readLineStrict(in, lineBuf, limits.maxChunkSizeLineBytes, socket, requestDeadlineNano);
                         } catch (SocketTimeoutException ste) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Timeout reading chunk size");
+                            sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Timeout reading chunk size");
                             chunkError = true;
                             break;
                         } catch (IOException ie) {
-                            sendError(out, Response.Status.BAD_REQUEST, ie.getMessage());
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", ie.getMessage());
                             chunkError = true;
                             break;
                         }
-                        if (hexLine == null) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in chunked body");
+
+                        if (sizeLine == null) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Unexpected EOF in chunked body");
                             chunkError = true;
                             break;
                         }
-                        hexLine = hexLine.trim();
-                        int semi = hexLine.indexOf(';');
-                        if (semi >= 0) hexLine = hexLine.substring(0, semi).trim();
+
+                        sizeLine = sizeLine.trim();
+                        int semi = sizeLine.indexOf(';');
+                        String hexSize = semi >= 0 ? sizeLine.substring(0, semi).trim() : sizeLine;
+
+                        // Rule 7: Hexadecimal nonnegative chunk lengths; reject signs (+/-), overflow
+                        if (hexSize.isEmpty() || hexSize.startsWith("+") || hexSize.startsWith("-") || hexSize.length() > 8) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Invalid chunk size syntax: " + sizeLine);
+                            chunkError = true;
+                            break;
+                        }
+
                         int chunkSize;
                         try {
-                            chunkSize = Integer.parseInt(hexLine, 16);
+                            long parsed = Long.parseLong(hexSize, 16);
+                            if (parsed < 0 || parsed > Integer.MAX_VALUE) {
+                                sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Invalid chunk size: " + hexSize);
+                                chunkError = true;
+                                break;
+                            }
+                            chunkSize = (int) parsed;
                         } catch (NumberFormatException e) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Invalid chunk size: " + hexLine);
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Invalid chunk size format: " + hexSize);
                             chunkError = true;
                             break;
                         }
-                        if (chunkSize < 0) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Negative chunk size");
-                            chunkError = true;
-                            break;
-                        }
+
                         if (chunkSize == 0) {
                             // Read trailing headers until empty line
-                            while (true) {
-                                String trailer;
-                                try {
-                                    trailer = readLine(in, lineBuf, 4096);
-                                } catch (IOException e) {
-                                    trailer = null;
+                            if (limits.allowTrailers) {
+                                int trailerBytes = 0;
+                                int trailerCount = 0;
+                                while (true) {
+                                    applyDeadlineTimeout(socket, requestDeadlineNano);
+                                    String trailer;
+                                    try {
+                                        trailer = readLineStrict(in, lineBuf, limits.maxHeaderLineBytes, socket, requestDeadlineNano);
+                                    } catch (SocketTimeoutException ste) {
+                                        sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Timeout reading trailers");
+                                        chunkError = true;
+                                        break;
+                                    } catch (IOException e) {
+                                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", e.getMessage());
+                                        chunkError = true;
+                                        break;
+                                    }
+                                    if (trailer == null || trailer.isEmpty()) break;
+                                    trailerCount++;
+                                    trailerBytes += trailer.length() + 2;
+                                    if (trailerCount > limits.maxTrailerCount || trailerBytes > limits.maxTrailerBytes) {
+                                        sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Trailer limits exceeded");
+                                        chunkError = true;
+                                        break;
+                                    }
                                 }
-                                if (trailer == null || trailer.isEmpty()) break;
                             }
-                            break;
+                            break; // Done with chunked body
                         }
-                        totalChunkBytes += chunkSize;
-                        if (totalChunkBytes > 65536) {
-                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "Payload too large (> 64KB)");
+
+                        // Rule 1: Validate each chunk length against MAX_BODY_BYTES - totalBytes BEFORE addition and BEFORE allocation!
+                        if (chunkSize > (limits.maxBodyBytes - totalChunkBytes)) {
+                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "limit_exceeded", "Chunked body exceeds limit of " + limits.maxBodyBytes + " bytes");
                             chunkError = true;
                             break;
                         }
+
                         byte[] chunk = new byte[chunkSize];
                         int nRead = 0;
                         while (nRead < chunkSize) {
-                            int r = in.read(chunk, nRead, chunkSize - nRead);
+                            applyDeadlineTimeout(socket, requestDeadlineNano);
+                            int r;
+                            try {
+                                r = in.read(chunk, nRead, chunkSize - nRead);
+                            } catch (SocketTimeoutException ste) {
+                                sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Timeout reading chunk data");
+                                chunkError = true;
+                                break;
+                            }
                             if (r < 0) {
-                                sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in chunk");
+                                sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Unexpected EOF in chunk data");
                                 chunkError = true;
                                 break;
                             }
                             nRead += r;
                         }
                         if (chunkError) break;
+
                         bodyBuf.write(chunk, 0, nRead);
-                        // Consume CRLF following chunk data
+                        totalChunkBytes += chunkSize;
+
+                        // Strict CRLF after chunk data
+                        applyDeadlineTimeout(socket, requestDeadlineNano);
                         String crlf;
                         try {
-                            crlf = readLine(in, lineBuf, 128);
+                            crlf = readLineStrict(in, lineBuf, 16, socket, requestDeadlineNano);
+                        } catch (SocketTimeoutException ste) {
+                            sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Timeout reading chunk delimiter");
+                            chunkError = true;
+                            break;
                         } catch (IOException e) {
-                            crlf = null;
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", e.getMessage());
+                            chunkError = true;
+                            break;
                         }
-                        if (crlf != null && !crlf.isEmpty()) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Malformed chunk ending");
+                        if (crlf == null || !crlf.isEmpty()) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Malformed chunk ending (missing CRLF)");
                             chunkError = true;
                             break;
                         }
                     }
+
                     if (chunkError) {
                         break;
                     }
                     body = bodyBuf.toByteArray();
                 } else {
-                    String clStr = headers.get("content-length");
                     int contentLength = 0;
-                    if (clStr != null) {
+                    if (cl != null) {
+                        String clTrimmed = cl.trim();
+                        if (clTrimmed.startsWith("+") || clTrimmed.startsWith("-") || !clTrimmed.matches("^[0-9]+$")) {
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Invalid Content-Length syntax: " + cl);
+                            break;
+                        }
                         try {
-                            contentLength = Integer.parseInt(clStr.trim());
+                            long parsed = Long.parseLong(clTrimmed);
+                            if (parsed < 0 || parsed > Integer.MAX_VALUE) {
+                                sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Content-Length overflow: " + cl);
+                                break;
+                            }
+                            contentLength = (int) parsed;
                         } catch (NumberFormatException e) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Invalid Content-Length");
+                            sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Invalid Content-Length: " + cl);
                             break;
                         }
-                        if (contentLength < 0) {
-                            sendError(out, Response.Status.BAD_REQUEST, "Negative Content-Length");
-                            break;
-                        }
-                        if (contentLength > 65536) {
-                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "Payload too large (> 64KB)");
+
+                        if (contentLength > limits.maxBodyBytes) {
+                            sendError(out, Response.Status.PAYLOAD_TOO_LARGE, "limit_exceeded",
+                                    "Content-Length (" + contentLength + ") exceeds maximum limit of " + limits.maxBodyBytes + " bytes");
                             break;
                         }
                     }
@@ -543,75 +801,112 @@ public abstract class MiniHttp {
                     body = new byte[contentLength];
                     if (contentLength > 0) {
                         int totalRead = 0;
+                        boolean bodyError = false;
                         while (totalRead < contentLength) {
-                            int read = in.read(body, totalRead, contentLength - totalRead);
+                            applyDeadlineTimeout(socket, requestDeadlineNano);
+                            int read;
+                            try {
+                                read = in.read(body, totalRead, contentLength - totalRead);
+                            } catch (SocketTimeoutException ste) {
+                                sendError(out, Response.Status.REQUEST_TIMEOUT, "request_timeout", "Timeout reading request body");
+                                bodyError = true;
+                                break;
+                            }
                             if (read < 0) {
-                                sendError(out, Response.Status.BAD_REQUEST, "Unexpected EOF in request body");
-                                return;
+                                sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Unexpected EOF in request body");
+                                bodyError = true;
+                                break;
                             }
                             totalRead += read;
+                        }
+                        if (bodyError) {
+                            break;
                         }
                     }
                 }
 
-                Request req = new Request(method, decodedUri, query, parms, headers, body);
+                // Dispatch to handler
+                Request req = new Request(method, decodedUri, query, parms, headers, body, socket.getInetAddress());
                 Response res;
                 try {
                     res = serve(req);
                 } catch (Throwable t) {
                     Log.e(TAG, "Unhandled exception in serve()", t);
-                    res = newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8", "{\"error\":\"Internal Server Error\"}");
+                    res = newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8",
+                            "{\"ok\":false,\"code\":\"internal_error\",\"error\":\"Internal Server Error\"}");
                 }
                 if (res == null) {
-                    res = newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8", "{\"error\":\"Null response\"}");
+                    res = newFixedLengthResponse(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8",
+                            "{\"ok\":false,\"code\":\"internal_error\",\"error\":\"Null response\"}");
                 }
 
                 boolean isHttp10 = "HTTP/1.0".equalsIgnoreCase(httpVersion);
                 String reqConn = headers.get("connection");
-                boolean closeRequested = "close".equalsIgnoreCase(reqConn) || (isHttp10 && !"keep-alive".equalsIgnoreCase(reqConn));
+                boolean closeRequested = "close".equalsIgnoreCase(reqConn)
+                        || (isHttp10 && !"keep-alive".equalsIgnoreCase(reqConn))
+                        || limits.closeAfterResponse
+                        || requestCount >= limits.maxRequestsPerConnection;
                 String resConn = res.headers.get("connection");
                 boolean resClose = "close".equalsIgnoreCase(resConn);
                 boolean shouldClose = closeRequested || resClose;
 
-                // Status line
-                out.write(("HTTP/1.1 " + res.status.code + " " + res.status.description + "\r\n").getBytes(StandardCharsets.US_ASCII));
-
-                // Content-Type
-                if (res.contentType != null && !res.contentType.isEmpty()) {
-                    out.write(("Content-Type: " + res.contentType + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                // Send response under response-write deadline with watchdog
+                ScheduledFuture<?> writeWatchdog = null;
+                if (watchdogService != null && !watchdogService.isShutdown()) {
+                    writeWatchdog = watchdogService.schedule(new Runnable() {
+                        @Override
+                        public void run() {
+                            closeQuietly(socket);
+                        }
+                    }, limits.responseWriteDeadlineMs, TimeUnit.MILLISECONDS);
                 }
 
-                // Content-Length
-                byte[] resBody = res.body != null ? res.body : new byte[0];
-                out.write(("Content-Length: " + resBody.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                try {
+                    setSocketTimeoutSafe(socket, limits.responseWriteDeadlineMs);
 
-                // Date
-                out.write(("Date: " + RFC1123.get().format(new Date()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                    // Status line
+                    out.write(("HTTP/1.1 " + res.status.code + " " + res.status.description + "\r\n").getBytes(StandardCharsets.US_ASCII));
 
-                // Connection
-                if (shouldClose) {
-                    out.write("Connection: close\r\n".getBytes(StandardCharsets.US_ASCII));
-                } else {
-                    out.write("Connection: keep-alive\r\n".getBytes(StandardCharsets.US_ASCII));
-                }
-
-                // Custom headers
-                for (Map.Entry<String, String> entry : res.headers.entrySet()) {
-                    String k = entry.getKey();
-                    if ("content-type".equalsIgnoreCase(k) || "content-length".equalsIgnoreCase(k)
-                        || "date".equalsIgnoreCase(k) || "connection".equalsIgnoreCase(k)) {
-                        continue;
+                    // Content-Type
+                    if (res.contentType != null && !res.contentType.isEmpty()) {
+                        out.write(("Content-Type: " + res.contentType + "\r\n").getBytes(StandardCharsets.US_ASCII));
                     }
-                    out.write((k + ": " + entry.getValue() + "\r\n").getBytes(StandardCharsets.US_ASCII));
-                }
-                out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
 
-                if (method != Method.HEAD) {
-                    if (resBody.length > 0) {
+                    // Content-Length
+                    byte[] resBody = res.body != null ? res.body : new byte[0];
+                    out.write(("Content-Length: " + resBody.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
+
+                    // Date
+                    out.write(("Date: " + RFC1123.get().format(new Date()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
+
+                    // Connection
+                    if (shouldClose) {
+                        out.write("Connection: close\r\n".getBytes(StandardCharsets.US_ASCII));
+                    } else {
+                        out.write("Connection: keep-alive\r\n".getBytes(StandardCharsets.US_ASCII));
+                    }
+
+                    // Custom headers
+                    for (Map.Entry<String, String> entry : res.headers.entrySet()) {
+                        String k = entry.getKey();
+                        if ("content-type".equalsIgnoreCase(k) || "content-length".equalsIgnoreCase(k)
+                            || "date".equalsIgnoreCase(k) || "connection".equalsIgnoreCase(k)) {
+                            continue;
+                        }
+                        out.write((k + ": " + entry.getValue() + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                    }
+                    out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
+
+                    // Body: HEAD responses do NOT output body
+                    if (method != Method.HEAD && resBody.length > 0) {
                         out.write(resBody);
                     }
+                    out.flush();
+                } finally {
+                    if (writeWatchdog != null) {
+                        writeWatchdog.cancel(false);
+                    }
                 }
-                out.flush();
 
                 if (shouldClose) {
                     break;
@@ -620,31 +915,52 @@ public abstract class MiniHttp {
         } catch (SocketTimeoutException ignored) {
         } catch (IOException ignored) {
         } catch (Throwable t) {
-            Log.w(TAG, "Connection handler error", t);
+            Log.w(TAG, "Connection handler error: " + t.getMessage());
         }
     }
 
-    private static String readLine(InputStream in, ByteArrayOutputStream lineBuf, int maxLen) throws IOException {
+    private static void applyDeadlineTimeout(Socket socket, long deadlineNano) throws SocketTimeoutException {
+        long remainingNano = deadlineNano - System.nanoTime();
+        if (remainingNano <= 0) {
+            throw new SocketTimeoutException("Request deadline exceeded");
+        }
+        long remainingMs = TimeUnit.NANOSECONDS.toMillis(remainingNano);
+        if (remainingMs <= 0) remainingMs = 1;
+        setSocketTimeoutSafe(socket, remainingMs);
+    }
+
+    private static void setSocketTimeoutSafe(Socket socket, long timeoutMs) {
+        try {
+            int to = (int) Math.min(Integer.MAX_VALUE, Math.max(1, timeoutMs));
+            socket.setSoTimeout(to);
+        } catch (SocketException ignored) {}
+    }
+
+    private static String readLineStrict(InputStream in, ByteArrayOutputStream lineBuf,
+                                         int maxLen, Socket socket, long deadlineNano) throws IOException {
         lineBuf.reset();
-        int b;
-        while ((b = in.read()) != -1) {
+        int prev = -1;
+        while (true) {
+            applyDeadlineTimeout(socket, deadlineNano);
+            int b = in.read();
+            if (b == -1) {
+                if (lineBuf.size() == 0) return null; // Clean EOF
+                throw new IOException("Premature EOF in line");
+            }
             if (b == '\n') {
-                byte[] bytes = lineBuf.toByteArray();
-                int len = bytes.length;
-                if (len > 0 && bytes[len - 1] == '\r') {
-                    len--;
+                if (prev != '\r') {
+                    throw new IOException("Strict CRLF violation: bare LF without preceding CR");
                 }
+                byte[] bytes = lineBuf.toByteArray();
+                int len = bytes.length - 1; // remove trailing \r
                 return new String(bytes, 0, len, StandardCharsets.UTF_8);
             }
             lineBuf.write(b);
-            if (lineBuf.size() > maxLen) {
-                throw new IOException("Header line exceeded max length of " + maxLen);
+            prev = b;
+            if (lineBuf.size() > maxLen + 2) {
+                throw new IOException("Line exceeded max length limit of " + maxLen);
             }
         }
-        if (lineBuf.size() == 0) {
-            return null; // clean EOF
-        }
-        throw new IOException("Truncated line at EOF");
     }
 
     private static Map<String, String> parseQueryParameters(String query) {
@@ -673,28 +989,21 @@ public abstract class MiniHttp {
         return parms;
     }
 
-    private void sendOverloadedError(Socket socket) {
+    private void sendOverloadAndClose(Socket socket, String reason) {
         try {
-            socket.setSoTimeout(2000);
+            setSocketTimeoutSafe(socket, 1000);
             OutputStream out = new BufferedOutputStream(socket.getOutputStream(), 1024);
-            sendError(out, Response.Status.SERVICE_UNAVAILABLE, "Server busy");
+            sendError(out, Response.Status.SERVICE_UNAVAILABLE, "busy", reason);
         } catch (Throwable ignored) {
         } finally {
             closeQuietly(socket);
         }
     }
 
-    private static void closeQuietly(Socket s) {
-        if (s != null) {
-            try {
-                if (!s.isClosed()) s.close();
-            } catch (IOException ignored) {}
-        }
-    }
-
-    private void sendError(OutputStream out, Response.Status status, String message) {
+    private void sendError(OutputStream out, Response.Status status, String code, String message) {
         try {
-            byte[] body = ("{\"error\":\"" + escapeJson(message) + "\"}").getBytes(StandardCharsets.UTF_8);
+            String json = "{\"ok\":false,\"code\":\"" + escapeJson(code) + "\",\"error\":\"" + escapeJson(message) + "\"}";
+            byte[] body = json.getBytes(StandardCharsets.UTF_8);
             out.write(("HTTP/1.1 " + status.code + " " + status.description + "\r\n").getBytes(StandardCharsets.US_ASCII));
             out.write("Content-Type: application/json; charset=utf-8\r\n".getBytes(StandardCharsets.US_ASCII));
             out.write(("Content-Length: " + body.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
@@ -703,6 +1012,14 @@ public abstract class MiniHttp {
             out.write(body);
             out.flush();
         } catch (IOException ignored) {}
+    }
+
+    private static void closeQuietly(Socket s) {
+        if (s != null) {
+            try {
+                if (!s.isClosed()) s.close();
+            } catch (IOException ignored) {}
+        }
     }
 
     private static String escapeJson(String s) {
@@ -747,7 +1064,8 @@ public abstract class MiniHttp {
             }
             return new Response(status, mimeType, baos.toByteArray());
         } catch (IOException e) {
-            return new Response(Response.Status.INTERNAL_ERROR, "text/plain", ("Error reading stream: " + e.getMessage()).getBytes(StandardCharsets.UTF_8));
+            return new Response(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8",
+                    ("{\"ok\":false,\"code\":\"internal_error\",\"error\":\"Error reading stream: " + escapeJson(e.getMessage()) + "\"}").getBytes(StandardCharsets.UTF_8));
         }
     }
 }
