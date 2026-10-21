@@ -1,7 +1,7 @@
 package com.xgimi.bridge;
 
 import android.content.Context;
-import android.os.RemoteException;
+import android.util.AtomicFile;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -13,324 +13,529 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 
 /**
- * Persists picture presets as JSON in the app private files dir.
- * Each preset: { id, name, values:{wbRed, wbGreen, wbBlue, colorTemp, pictureMode, gameMode}, createdAt, updatedAt }
- * Any field in values can be null/missing -- that field is left unchanged on apply.
+ * Durable, quota-bounded storage for picture presets.
+ * Uses AtomicFile for crash-safe writes, preserves corrupt stores without truncation,
+ * enforces storage quotas and protects built-in presets.
  */
 public class PresetStore {
     private static final String TAG = "XgimiBridge";
-    private static final String FILE = "presets.json";
+    public static final String FILE = "presets.json";
+    public static final String RECOVERY_FILE = "presets.json.recovery";
+    public static final String BALANCED_ID = "balanced";
+
+    public static final int MAX_CUSTOM_PRESETS = 100;
+    public static final int MAX_NAME_CODE_POINTS = 80;
+    public static final int MAX_NAME_BYTES = 320;
+    public static final int MAX_ID_CHARS = 96;
+    public static final int MAX_STORE_BYTES = 262144; // 256 KB
 
     private final File path;
+    private final File recoveryPath;
+    private final AtomicFile atomicFile;
     private final AidlClient aidl;
+    private final Object storageLock = new Object();
+
+    public static class PresetStorageException extends Exception {
+        public final int statusCode;
+        public final String errorCode;
+
+        public PresetStorageException(int statusCode, String errorCode, String message) {
+            super(message);
+            this.statusCode = statusCode;
+            this.errorCode = errorCode;
+        }
+
+        public PresetStorageException(int statusCode, String errorCode, String message, Throwable cause) {
+            super(message, cause);
+            this.statusCode = statusCode;
+            this.errorCode = errorCode;
+        }
+    }
+
+    public static class BuiltinReadOnlyException extends RuntimeException {
+        public BuiltinReadOnlyException(String msg) {
+            super(msg);
+        }
+    }
 
     public PresetStore(Context ctx, AidlClient aidl) {
-        this.path = new File(ctx.getFilesDir(), FILE);
+        File filesDir = ctx.getFilesDir();
+        this.path = new File(filesDir, FILE);
+        this.recoveryPath = new File(filesDir, RECOVERY_FILE);
+        this.atomicFile = new AtomicFile(this.path);
         this.aidl = aidl;
     }
 
-    public synchronized JSONArray load() {
-        ensureBuiltins();
-        if (!path.exists()) return new JSONArray();
-        try (FileInputStream f = new FileInputStream(path)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192]; int n;
-            while ((n = f.read(buf)) != -1) out.write(buf, 0, n);
-            return new JSONArray(out.toString("UTF-8"));
-        } catch (IOException | JSONException e) {
-            Log.e(TAG, "preset load failed", e);
-            return new JSONArray();
-        }
-    }
-
-    private synchronized void save(JSONArray arr) throws IOException {
-        File tmp = new File(path.getParent(), FILE + ".tmp");
-        try (FileOutputStream f = new FileOutputStream(tmp)) {
-            f.write(arr.toString().getBytes("UTF-8"));
-        }
-        if (!tmp.renameTo(path)) {
-            // fallback
-            tmp.delete();
-            try (FileOutputStream f = new FileOutputStream(path)) {
-                f.write(arr.toString().getBytes("UTF-8"));
-            }
-        }
-    }
-
-
-    private static final String BALANCED_ID = "balanced";
-
-    /** Canonical values applied by the built-in Balanced preset. WB tint chosen by the user;
-     *  picture values set to neutral (50) so tapping Balanced resets any prior tweaks. */
-    private static JSONObject balancedValues() throws JSONException {
-        return new JSONObject()
-                .put("wbRed", 60).put("wbGreen", 50).put("wbBlue", 55)
-                .put("brightness", 50).put("contrast", 50)
-                .put("saturation", 50).put("sharpness", 50).put("hue", 50);
-    }
-
-    /** Ensure built-in Balanced preset exists with canonical values; migrate legacy Vivid preset if found. */
-    private void ensureBuiltins() {
+    public static JSONObject balancedValues() {
+        JSONObject v = new JSONObject();
         try {
-            JSONArray arr = readRaw();
-            JSONObject balanced = null;
-            int legacyIdx = -1;
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject p = arr.getJSONObject(i);
-                String id = p.optString("id");
-                if (BALANCED_ID.equals(id)) { balanced = p; }
-                else if ("vivid".equals(id) || "Vivid".equals(p.optString("name"))) { legacyIdx = i; }
+            v.put("wbRed", 60);
+            v.put("wbGreen", 50);
+            v.put("wbBlue", 55);
+            v.put("brightness", 50);
+            v.put("contrast", 50);
+            v.put("saturation", 50);
+            v.put("sharpness", 50);
+            v.put("hue", 50);
+        } catch (JSONException ignored) {}
+        return v;
+    }
+
+    /**
+     * Explicit initialization and built-in migration at service startup.
+     * Missing stores get canonical defaults; existing stores are preserved and validated.
+     */
+    public void initialize() throws PresetStorageException {
+        synchronized (storageLock) {
+            File backup = new File(path.getPath() + ".bak");
+            boolean exists = path.exists() || backup.exists();
+            if (!exists) {
+                // Check if recovery file exists before declaring store absent
+                if (recoveryPath.exists() && recoveryPath.length() > 0) {
+                    try (FileInputStream in = new FileInputStream(recoveryPath);
+                         FileOutputStream out = new FileOutputStream(path)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) != -1) {
+                            out.write(buf, 0, n);
+                        }
+                        Log.i(TAG, "Restored preset store from recovery copy at " + recoveryPath.getAbsolutePath());
+                    } catch (IOException e) {
+                        Log.w(TAG, "Failed restoring store from recovery copy: " + e.getMessage());
+                    }
+                }
             }
-            boolean changed = false;
-            if (balanced == null && legacyIdx >= 0) {
-                JSONObject p = arr.getJSONObject(legacyIdx);
-                p.put("id", BALANCED_ID);
-                p.put("name", "Balanced");
-                p.put("builtin", true);
-                p.put("values", balancedValues());
-                p.put("updatedAt", System.currentTimeMillis());
-                Log.i(TAG, "migrated Vivid -> Balanced");
-                changed = true;
-            } else if (balanced == null) {
+
+            exists = path.exists() || backup.exists();
+            if (!exists) {
+                // Store is missing -> create default Balanced preset
+                JSONArray initial = new JSONArray();
                 long now = System.currentTimeMillis();
-                JSONObject p = new JSONObject()
-                    .put("id", BALANCED_ID)
-                    .put("name", "Balanced")
-                    .put("values", balancedValues())
-                    .put("builtin", true)
-                    .put("createdAt", now)
-                    .put("updatedAt", now);
-                arr.put(p);
-                Log.i(TAG, "created Balanced built-in preset");
-                changed = true;
-            } else {
-                JSONObject canonical = balancedValues();
-                if (!sameValues(balanced.optJSONObject("values"), canonical)) {
-                    balanced.put("values", canonical);
-                    balanced.put("updatedAt", System.currentTimeMillis());
-                    Log.i(TAG, "refreshed Balanced built-in preset values");
-                    changed = true;
+                try {
+                    JSONObject p = new JSONObject();
+                    p.put("id", BALANCED_ID);
+                    p.put("name", "Balanced");
+                    p.put("values", balancedValues());
+                    p.put("builtin", true);
+                    p.put("createdAt", now);
+                    p.put("updatedAt", now);
+                    initial.put(p);
+                    saveInternal(initial);
+                    Log.i(TAG, "Initialized default presets with Balanced");
+                } catch (JSONException | IOException e) {
+                    throw new PresetStorageException(500, "preset_store_unavailable",
+                            "Failed to initialize preset store: " + e.getMessage(), e);
                 }
-                if (!balanced.optBoolean("builtin", false)) {
-                    balanced.put("builtin", true);
-                    changed = true;
-                }
-            }
-            // Sanitize values on every preset (clean up any leaked diagnostic fields)
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject p = arr.getJSONObject(i);
-                JSONObject v = p.optJSONObject("values");
-                if (v != null) {
-                    JSONObject clean = sanitizeValues(v);
-                    if (clean.length() != v.length()) {
-                        p.put("values", clean);
-                        changed = true;
-                    }
-                }
-            }
-            if (changed) save(arr);
-        } catch (Exception e) {
-            Log.e(TAG, "ensureBuiltins failed", e);
-        }
-    }
-
-    private JSONArray readRaw() {
-        if (!path.exists()) return new JSONArray();
-        try (FileInputStream f = new FileInputStream(path)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192]; int n;
-            while ((n = f.read(buf)) != -1) out.write(buf, 0, n);
-            return new JSONArray(out.toString("UTF-8"));
-        } catch (Exception e) { return new JSONArray(); }
-    }
-    public synchronized JSONObject create(JSONObject body) throws IOException, JSONException {
-        String name = body.optString("name", "Untitled").trim();
-        if (name.isEmpty()) name = "Untitled";
-        JSONObject values = sanitizeValues(body.optJSONObject("values"));
-        if (values.length() == 0) values = captureCurrent();
-
-        String id = uniqueIdFor(name);
-        JSONObject p = new JSONObject();
-        long now = System.currentTimeMillis();
-        p.put("id", id);
-        p.put("name", name);
-        p.put("values", values);
-        p.put("createdAt", now);
-        p.put("updatedAt", now);
-
-        JSONArray arr = load();
-        arr.put(p);
-        save(arr);
-        return p;
-    }
-
-    public synchronized JSONObject update(String id, JSONObject body) throws IOException, JSONException {
-        JSONArray arr = load();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject p = arr.getJSONObject(i);
-            if (id.equals(p.getString("id"))) {
-                if (body.has("name")) p.put("name", body.getString("name"));
-                if (body.has("values")) p.put("values", sanitizeValues(body.optJSONObject("values")));
-                p.put("updatedAt", System.currentTimeMillis());
-                save(arr);
-                return p;
-            }
-        }
-        return null;
-    }
-
-    /** Update a preset's values to provided state or current projector state (preserve id+name). */
-    public synchronized JSONObject syncFromCurrent(String id, JSONObject body) throws IOException, JSONException {
-        JSONObject values = body != null ? sanitizeValues(body.optJSONObject("values")) : new JSONObject();
-        if (values.length() == 0) values = captureCurrent();
-        JSONArray arr = load();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject p = arr.getJSONObject(i);
-            if (id.equals(p.getString("id"))) {
-                p.put("values", values);
-                p.put("updatedAt", System.currentTimeMillis());
-                save(arr);
-                return p;
-            }
-        }
-        return null;
-    }
-
-    public static class BuiltinException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-        public BuiltinException(String s) { super(s); }
-    }
-
-    public synchronized boolean delete(String id) throws IOException, JSONException {
-        JSONArray arr = load();
-        JSONArray out = new JSONArray();
-        boolean removed = false;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject p = arr.getJSONObject(i);
-            if (id.equals(p.getString("id"))) { if (p.optBoolean("builtin", false)) throw new BuiltinException("cannot delete built-in preset"); removed = true; continue; }
-            out.put(p);
-        }
-        if (removed) save(out);
-        return removed;
-    }
-
-    public JSONObject apply(String id) throws RemoteException, JSONException {
-        JSONArray arr = load();
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject p = arr.getJSONObject(i);
-            if (id.equals(p.getString("id"))) {
-                JSONObject v = p.optJSONObject("values");
-                if (v != null) applyValues(v);
-                Map<String, Object> snap = aidl.snapshot();
-                for (Map.Entry<String, Object> e : snap.entrySet()) {
-                    if (e.getValue() instanceof Map) {
-                        e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
-                    }
-                }
-                JSONObject reply = new JSONObject();
-                reply.put("ok", true).put("id", id).put("after", new JSONObject(snap));
-                return reply;
-            }
-        }
-        return null;
-    }
-
-    private void applyValues(JSONObject v) throws RemoteException {
-        // pictureMode + colorTemp first — they may switch the active slot, which affects WB writes.
-        if (v.has("pictureMode")) writeAndVerify("pictureMode", AidlClient.TX_SET_PICTURE_MODE, AidlClient.TX_GET_PICTURE_MODE, v.optInt("pictureMode"));
-        if (v.has("colorTemp"))   writeAndVerify("colorTemp",   AidlClient.TX_SET_COLOR_TEMP,   AidlClient.TX_GET_COLOR_TEMP,   v.optInt("colorTemp"));
-        if (v.has("wbRed"))       writeAndVerify("wbRed",       AidlClient.TX_SET_WB_RED_GAIN,   AidlClient.TX_GET_WB_RED_GAIN,   v.optInt("wbRed"));
-        if (v.has("wbGreen"))     writeAndVerify("wbGreen",     AidlClient.TX_SET_WB_GREEN_GAIN, AidlClient.TX_GET_WB_GREEN_GAIN, v.optInt("wbGreen"));
-        if (v.has("wbBlue"))      writeAndVerify("wbBlue",      AidlClient.TX_SET_WB_BLUE_GAIN,  AidlClient.TX_GET_WB_BLUE_GAIN,  v.optInt("wbBlue"));
-        if (v.has("gameMode"))    writeAndVerify("gameMode",    AidlClient.TX_SET_GAME_MODE_OPTION, AidlClient.TX_GET_GAME_MODE_OPTION, v.optInt("gameMode"));
-        // Picture items: getter is unreliable on this firmware (returns slot-0 value, not active),
-        // so verify+retry produces false failures. The setter itself works visibly (confirmed by sliders),
-        // so just write once and space writes ~150ms apart so the native HAL can apply each one cleanly.
-        if (v.has("brightness")) writePictureItem("brightness", 0, v.optInt("brightness"));
-        if (v.has("contrast"))   writePictureItem("contrast",   1, v.optInt("contrast"));
-        if (v.has("saturation")) writePictureItem("saturation", 2, v.optInt("saturation"));
-        if (v.has("sharpness"))  writePictureItem("sharpness",  3, v.optInt("sharpness"));
-        if (v.has("hue"))        writePictureItem("hue",        4, v.optInt("hue"));
-    }
-
-    private void writePictureItem(String label, int item, int target) throws RemoteException {
-        boolean ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, item, target);
-        Log.i(TAG, label + "=" + target + " (set returned " + ok + ")");
-        try { Thread.sleep(150); } catch (InterruptedException ie) {}
-    }
-
-    private void writeAndVerify(String label, int setCode, int getCode, int target) throws RemoteException {
-        for (int attempt = 0; attempt < 4; attempt++) {
-            aidl.setInt(setCode, target);
-            try { Thread.sleep(60); } catch (InterruptedException ie) {}
-            int got;
-            try { got = aidl.getInt(getCode); } catch (Throwable t) { got = -9999; }
-            if (got == target) {
-                Log.i(TAG, label + "=" + target + " ok (attempt " + (attempt + 1) + ")");
                 return;
             }
-            Log.w(TAG, label + ": wrote " + target + " but readback=" + got + " (retry " + (attempt + 1) + ")");
-        }
-        Log.e(TAG, label + ": failed to converge to " + target + " after 4 attempts");
-    }
 
-    /** Whitelist of preset-storable fields (must match keys handled by applyValues). */
-    private static boolean sameValues(JSONObject a, JSONObject b) {
-        if (a == null || b == null) return false;
-        if (a.length() != b.length()) return false;
-        java.util.Iterator<String> it = b.keys();
-        while (it.hasNext()) {
-            String k = it.next();
-            if (!a.has(k)) return false;
-            if (a.optInt(k, Integer.MIN_VALUE) != b.optInt(k, Integer.MIN_VALUE + 1)) return false;
-        }
-        return true;
-    }
+            // Store exists: load and validate
+            JSONArray arr = loadInternal();
+            boolean changed = false;
+            JSONObject balanced = null;
+            int legacyIdx = -1;
 
-    private static final java.util.Set<String> WRITABLE = new java.util.HashSet<>(java.util.Arrays.asList(
-        "wbRed", "wbGreen", "wbBlue", "colorTemp", "pictureMode", "gameMode",
-        "brightness", "contrast", "saturation", "sharpness", "hue"
-    ));
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p == null) continue;
+                String id = p.optString("id", "");
+                String name = p.optString("name", "");
+                if (BALANCED_ID.equals(id)) {
+                    balanced = p;
+                } else if ("vivid".equalsIgnoreCase(id) || "vivid".equalsIgnoreCase(name)) {
+                    legacyIdx = i;
+                }
+            }
 
-    private JSONObject captureCurrent() throws JSONException {
-        JSONObject v = new JSONObject();
-        for (java.util.Map.Entry<String,Object> e : aidl.snapshot().entrySet()) {
-            if (WRITABLE.contains(e.getKey()) && e.getValue() instanceof Integer) {
-                v.put(e.getKey(), e.getValue());
+            if (balanced == null && legacyIdx >= 0) {
+                preserveRecoveryCopy();
+                JSONObject p = arr.optJSONObject(legacyIdx);
+                try {
+                    p.put("id", BALANCED_ID);
+                    p.put("name", "Balanced");
+                    p.put("builtin", true);
+                    p.put("values", balancedValues());
+                    p.put("updatedAt", System.currentTimeMillis());
+                } catch (JSONException ignored) {}
+                changed = true;
+                Log.i(TAG, "Migrated legacy Vivid preset to Balanced");
+            } else if (balanced == null) {
+                preserveRecoveryCopy();
+                long now = System.currentTimeMillis();
+                try {
+                    JSONObject p = new JSONObject();
+                    p.put("id", BALANCED_ID);
+                    p.put("name", "Balanced");
+                    p.put("values", balancedValues());
+                    p.put("builtin", true);
+                    p.put("createdAt", now);
+                    p.put("updatedAt", now);
+                    arr.put(p);
+                } catch (JSONException ignored) {}
+                changed = true;
+                Log.i(TAG, "Added missing Balanced built-in preset");
+            } else {
+                if (!balanced.optBoolean("builtin", false)) {
+                    preserveRecoveryCopy();
+                    try {
+                        balanced.put("builtin", true);
+                    } catch (JSONException ignored) {}
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                try {
+                    saveInternal(arr);
+                } catch (IOException e) {
+                    throw new PresetStorageException(500, "preset_store_unavailable",
+                            "Failed to save migrated presets: " + e.getMessage(), e);
+                }
             }
         }
-        return v;
     }
 
-    /** Strip non-writable or null keys from any incoming/stored values blob. */
-    private JSONObject sanitizeValues(JSONObject in) throws JSONException {
-        JSONObject v = new JSONObject();
-        if (in == null) return v;
-        java.util.Iterator<String> it = in.keys();
-        while (it.hasNext()) {
-            String k = it.next();
-            if (WRITABLE.contains(k) && !in.isNull(k) && in.opt(k) instanceof Number) {
-                v.put(k, in.optInt(k));
+    private void preserveRecoveryCopy() {
+        if (!recoveryPath.exists() && path.exists()) {
+            try (FileInputStream in = new FileInputStream(path);
+                 FileOutputStream out = new FileOutputStream(recoveryPath)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                }
+                Log.i(TAG, "Preserved recovery copy of presets at " + recoveryPath.getAbsolutePath());
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to preserve recovery copy of presets: " + e.getMessage());
             }
         }
-        return v;
     }
 
-    private String uniqueIdFor(String name) {
-        String base = name.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+    /**
+     * Read-only load. Preserves file bytes and modification times.
+     */
+    public JSONArray load() throws PresetStorageException {
+        synchronized (storageLock) {
+            return loadInternal();
+        }
+    }
+
+    private JSONArray loadInternal() throws PresetStorageException {
+        File backup = new File(path.getPath() + ".bak");
+        if (!path.exists() && !backup.exists()) {
+            return new JSONArray();
+        }
+
+        long length = path.exists() ? path.length() : backup.length();
+        if (length > MAX_STORE_BYTES) {
+            throw new PresetStorageException(413, "limit_exceeded",
+                    "Preset store file exceeds maximum quota of " + MAX_STORE_BYTES + " bytes (" + length + " bytes)");
+        }
+
+        byte[] raw;
+        try {
+            raw = atomicFile.readFully();
+        } catch (IOException e) {
+            throw new PresetStorageException(500, "preset_store_unavailable",
+                    "Failed to read preset store: " + e.getMessage(), e);
+        }
+
+        if (raw.length > MAX_STORE_BYTES) {
+            throw new PresetStorageException(413, "limit_exceeded",
+                    "Preset store file exceeds maximum quota of " + MAX_STORE_BYTES + " bytes (" + raw.length + " bytes)");
+        }
+
+        String str = new String(raw, StandardCharsets.UTF_8).trim();
+        if (str.isEmpty()) {
+            throw new PresetStorageException(500, "preset_store_unavailable",
+                    "Preset store file is empty or corrupt");
+        }
+
+        try {
+            return new JSONArray(str);
+        } catch (JSONException e) {
+            throw new PresetStorageException(500, "preset_store_unavailable",
+                    "Preset store is corrupt: " + e.getMessage(), e);
+        }
+    }
+
+    private void saveInternal(JSONArray arr) throws IOException, PresetStorageException {
+        String json = arr.toString();
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_STORE_BYTES) {
+            throw new PresetStorageException(413, "limit_exceeded",
+                    "Serialized preset store size (" + bytes.length + " bytes) exceeds maximum quota of " + MAX_STORE_BYTES + " bytes");
+        }
+
+        FileOutputStream out = null;
+        try {
+            out = atomicFile.startWrite();
+            out.write(bytes);
+            atomicFile.finishWrite(out);
+        } catch (IOException e) {
+            if (out != null) {
+                atomicFile.failWrite(out);
+            }
+            throw e;
+        }
+    }
+
+    public JSONObject create(JSONObject body) throws PresetStorageException, IOException {
+        if (body == null) {
+            throw new IllegalArgumentException("Missing request body");
+        }
+
+        String rawName = body.optString("name", "").trim();
+        validatePresetName(rawName);
+
+        JSONObject valuesIn = body.optJSONObject("values");
+        Map<String, Integer> validatedValues;
+        if (valuesIn == null || !body.has("values")) {
+            // Omitted values: capture current
+            validatedValues = captureCurrentWritable();
+        } else {
+            if (valuesIn.length() == 0) {
+                throw new IllegalArgumentException("Values object cannot be empty when provided");
+            }
+            validatedValues = validateAndExtractValues(valuesIn);
+        }
+
+        synchronized (storageLock) {
+            JSONArray arr = loadInternal();
+            int customCount = 0;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p != null && !p.optBoolean("builtin", false) && !BALANCED_ID.equals(p.optString("id"))) {
+                    customCount++;
+                }
+            }
+
+            if (customCount >= MAX_CUSTOM_PRESETS) {
+                throw new PresetStorageException(413, "limit_exceeded",
+                        "Custom presets quota exceeded (max " + MAX_CUSTOM_PRESETS + ")");
+            }
+
+            String id = generateUniqueId(rawName, arr);
+            long now = System.currentTimeMillis();
+            JSONObject p = new JSONObject();
+            try {
+                p.put("id", id);
+                p.put("name", rawName);
+                p.put("values", new JSONObject(validatedValues));
+                p.put("createdAt", now);
+                p.put("updatedAt", now);
+            } catch (JSONException ignored) {}
+
+            arr.put(p);
+            saveInternal(arr);
+            return p;
+        }
+    }
+
+    public JSONObject update(String id, JSONObject body) throws PresetStorageException, IOException {
+        if (id == null || id.isEmpty()) {
+            throw new IllegalArgumentException("Missing preset id");
+        }
+        if (body == null) {
+            throw new IllegalArgumentException("Missing request body");
+        }
+
+        String newName = null;
+        if (body.has("name")) {
+            newName = body.optString("name", "").trim();
+            validatePresetName(newName);
+        }
+
+        Map<String, Integer> newValues = null;
+        if (body.has("values")) {
+            JSONObject valuesIn = body.optJSONObject("values");
+            if (valuesIn == null || valuesIn.length() == 0) {
+                throw new IllegalArgumentException("Values object cannot be null or empty when specified");
+            }
+            newValues = validateAndExtractValues(valuesIn);
+        }
+
+        synchronized (storageLock) {
+            JSONArray arr = loadInternal();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p != null && id.equals(p.optString("id"))) {
+                    if (p.optBoolean("builtin", false) || BALANCED_ID.equals(id)) {
+                        throw new BuiltinReadOnlyException("Built-in preset is read-only and cannot be modified");
+                    }
+                    try {
+                        if (newName != null) p.put("name", newName);
+                        if (newValues != null) p.put("values", new JSONObject(newValues));
+                        p.put("updatedAt", System.currentTimeMillis());
+                    } catch (JSONException ignored) {}
+                    saveInternal(arr);
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+
+    public JSONObject syncFromCurrent(String id, JSONObject body) throws PresetStorageException, IOException {
+        if (id == null || id.isEmpty()) {
+            throw new IllegalArgumentException("Missing preset id");
+        }
+
+        Map<String, Integer> valuesToSync;
+        if (body != null && body.has("values")) {
+            JSONObject valuesIn = body.optJSONObject("values");
+            if (valuesIn == null || valuesIn.length() == 0) {
+                throw new IllegalArgumentException("Values object cannot be null or empty when specified");
+            }
+            valuesToSync = validateAndExtractValues(valuesIn);
+        } else {
+            valuesToSync = captureCurrentWritable();
+        }
+
+        synchronized (storageLock) {
+            JSONArray arr = loadInternal();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p != null && id.equals(p.optString("id"))) {
+                    if (p.optBoolean("builtin", false) || BALANCED_ID.equals(id)) {
+                        throw new BuiltinReadOnlyException("Built-in preset is read-only and cannot be synced");
+                    }
+                    try {
+                        p.put("values", new JSONObject(valuesToSync));
+                        p.put("updatedAt", System.currentTimeMillis());
+                    } catch (JSONException ignored) {}
+                    saveInternal(arr);
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+
+    public boolean delete(String id) throws PresetStorageException, IOException {
+        if (id == null || id.isEmpty()) {
+            throw new IllegalArgumentException("Missing preset id");
+        }
+        synchronized (storageLock) {
+            JSONArray arr = loadInternal();
+            JSONArray out = new JSONArray();
+            boolean removed = false;
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p == null) continue;
+                if (id.equals(p.optString("id"))) {
+                    if (p.optBoolean("builtin", false) || BALANCED_ID.equals(id)) {
+                        throw new BuiltinReadOnlyException("Cannot delete built-in preset");
+                    }
+                    removed = true;
+                    continue;
+                }
+                out.put(p);
+            }
+            if (removed) {
+                saveInternal(out);
+            }
+            return removed;
+        }
+    }
+
+    public JSONObject getPreset(String id) throws PresetStorageException {
+        if (id == null || id.isEmpty()) return null;
+        synchronized (storageLock) {
+            JSONArray arr = loadInternal();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject p = arr.optJSONObject(i);
+                if (p != null && id.equals(p.optString("id"))) {
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+
+    public Map<String, Integer> validateAndExtractValues(JSONObject valuesObj) {
+        if (valuesObj == null) {
+            throw new IllegalArgumentException("values cannot be null");
+        }
+        Map<String, Integer> result = new HashMap<>();
+        Iterator<String> keys = valuesObj.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (valuesObj.isNull(key)) {
+                throw new IllegalArgumentException("Explicit null is invalid for preset value: " + key);
+            }
+            String canonical = SettingRules.canonicalField(key);
+            if (canonical == null || !SettingRules.PRESET_WRITABLE_FIELDS.contains(canonical)) {
+                throw new IllegalArgumentException("Unknown or non-writable setting field: " + key);
+            }
+            Object raw = valuesObj.opt(key);
+            int validInt = SettingRules.validateSettingValue(canonical, raw);
+            result.put(canonical, validInt);
+        }
+        return result;
+    }
+
+    private Map<String, Integer> captureCurrentWritable() {
+        Map<String, Integer> map = new HashMap<>();
+        if (aidl != null) {
+            for (Map.Entry<String, Object> e : aidl.snapshot().entrySet()) {
+                String canonical = SettingRules.canonicalField(e.getKey());
+                if (canonical != null && SettingRules.PRESET_WRITABLE_FIELDS.contains(canonical)
+                        && e.getValue() instanceof Number) {
+                    try {
+                        int v = SettingRules.validateSettingValue(canonical, e.getValue());
+                        map.put(canonical, v);
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+        }
+        return map;
+    }
+
+    private static void validatePresetName(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Preset name cannot be empty");
+        }
+        int codePoints = name.codePointCount(0, name.length());
+        if (codePoints > MAX_NAME_CODE_POINTS) {
+            throw new IllegalArgumentException("Preset name exceeds max length of " + MAX_NAME_CODE_POINTS + " code points");
+        }
+        byte[] bytes = name.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_NAME_BYTES) {
+            throw new IllegalArgumentException("Preset name exceeds max UTF-8 bytes of " + MAX_NAME_BYTES);
+        }
+    }
+
+    private static String generateUniqueId(String name, JSONArray current) {
+        String base = name.toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
         if (base.isEmpty()) base = "preset";
-        JSONArray arr = load();
-        String candidate = base; int n = 2;
+        if (base.length() > MAX_ID_CHARS - 10) {
+            base = base.substring(0, MAX_ID_CHARS - 10);
+        }
+
+        String candidate = base;
+        int n = 2;
         while (true) {
             boolean clash = false;
-            for (int i = 0; i < arr.length(); i++) {
-                if (candidate.equals(arr.optJSONObject(i).optString("id"))) { clash = true; break; }
+            for (int i = 0; i < current.length(); i++) {
+                JSONObject p = current.optJSONObject(i);
+                if (p != null && candidate.equals(p.optString("id"))) {
+                    clash = true;
+                    break;
+                }
             }
             if (!clash) return candidate;
             candidate = base + "-" + n++;
+            if (candidate.length() > MAX_ID_CHARS) {
+                candidate = candidate.substring(0, MAX_ID_CHARS);
+            }
         }
     }
 }
