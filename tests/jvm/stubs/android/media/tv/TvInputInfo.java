@@ -1,0 +1,1 @@
+package android.media.tv; public class TvInputInfo {public String getId(){return null;} public String getParentId(){return null;} public int getType(){return 0;} public CharSequence loadLabel(android.content.Context c){return null;} public CharSequence loadCustomLabel(android.content.Context c){return null;}}

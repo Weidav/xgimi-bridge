@@ -1,0 +1,1 @@
+package android.app; public class ActivityManager {public void killBackgroundProcesses(String p){}}
