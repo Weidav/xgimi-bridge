@@ -34,19 +34,7 @@ const GAME_MODE_OPTIONS = [
   { value: 2, label: "Boost" },
 ];
 
-async function api(path, opts = {}) {
-  const r = await fetch(path, {
-    method: opts.method || "GET",
-    headers: opts.body ? { "Content-Type": "application/json" } : {},
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
-  const data = await r.json().catch(() => null);
-  if (!r.ok) {
-    throw new Error((data && data.error) || `HTTP ${r.status}`);
-  }
-  return data;
-}
+import { api, extractWritableValues, epToField } from "./api.js";
 
 function sourceTitle(picture, inputs) {
   if (!picture) return "";
@@ -92,22 +80,6 @@ function inputLabelForPort(inputs, port, fallback) {
   return fallback;
 }
 
-function epToField(ep) {
-  switch (ep) {
-    case "wb-red": return "wbRed";
-    case "wb-green": return "wbGreen";
-    case "wb-blue": return "wbBlue";
-    case "color-temp": return "colorTemp";
-    case "picture-mode": return "pictureMode";
-    case "game-mode": return "gameMode";
-    case "brightness": return "brightness";
-    case "contrast": return "contrast";
-    case "saturation": return "saturation";
-    case "sharpness": return "sharpness";
-    case "hue": return "hue";
-    default: return null;
-  }
-}
 
 function rgbDot(v) {
   const r = clamp(v?.wbRed), g = clamp(v?.wbGreen), b = clamp(v?.wbBlue);
@@ -346,16 +318,58 @@ export default function App() {
     return () => { cancelled = true; clearInterval(t); };
   }, [authorizing]);
 
-  async function setKnob(ep, value) {
-    setBusy(true);
+  const knobQueueRef = useRef(new Map());
+  const knobInFlightRef = useRef(false);
+
+  const processKnobQueue = useCallback(async () => {
+    if (knobInFlightRef.current) return;
+    knobInFlightRef.current = true;
     try {
-      await api(`/api/picture/${ep}`, { method: "POST", body: { value } });
-      // Optimistic: trust what we wrote, skip the lying getter.
-      const fieldKey = epToField(ep);
-      if (fieldKey) setPicture((prev) => prev ? { ...prev, [fieldKey]: value } : prev);
-    } catch (e) { setErr(String(e)); }
-    finally { setBusy(false); }
-  }
+      while (knobQueueRef.current.size > 0) {
+        const entry = knobQueueRef.current.entries().next().value;
+        if (!entry) break;
+        const [ep, targetValue] = entry;
+        knobQueueRef.current.delete(ep);
+
+        setBusy(true);
+        let retries = 0;
+        let success = false;
+        while (retries < 3 && !success) {
+          try {
+            await api(`/api/picture/${ep}`, { method: "POST", body: { value: targetValue } });
+            const fieldKey = epToField(ep);
+            if (fieldKey) {
+              setPicture((prev) => (prev ? { ...prev, [fieldKey]: targetValue } : prev));
+            }
+            success = true;
+          } catch (e) {
+            if (knobQueueRef.current.has(ep)) {
+              break;
+            }
+            const isBusy = e.message && (e.message.includes("503") || e.message.toLowerCase().includes("busy"));
+            if (isBusy && retries < 2) {
+              retries++;
+              await new Promise((r) => setTimeout(r, 100 * retries));
+            } else {
+              setErr(String(e));
+              break;
+            }
+          }
+        }
+      }
+    } finally {
+      knobInFlightRef.current = false;
+      setBusy(false);
+      if (knobQueueRef.current.size > 0) {
+        processKnobQueue();
+      }
+    }
+  }, []);
+
+  const setKnob = useCallback((ep, value) => {
+    knobQueueRef.current.set(ep, value);
+    processKnobQueue();
+  }, [processKnobQueue]);
 
   async function reset() {
     setBusy(true);
@@ -371,7 +385,8 @@ export default function App() {
     if (!name || !name.trim()) return;
     setBusy(true);
     try {
-      await api("/api/presets", { method: "POST", body: { name: name.trim(), values: picture } });
+      const values = extractWritableValues(picture);
+      await api("/api/presets", { method: "POST", body: { name: name.trim(), values } });
       setPresets(await api("/api/presets"));
     } catch (e) { setErr(String(e)); }
     finally { setBusy(false); }
@@ -381,23 +396,44 @@ export default function App() {
     const preset = presets.find((x) => x.id === id);
     setBusy(true);
     try {
-      await api(`/api/presets/${id}/apply`, { method: "POST" });
-      // Optimistic update from preset values (getter is unreliable for picture items).
-      if (preset?.values) setPicture((prev) => prev ? { ...prev, ...preset.values } : prev);
-    } catch (e) { setErr(String(e)); }
-    finally { setBusy(false); }
+      const res = await api(`/api/presets/${id}/apply`, { method: "POST" });
+      if (res && res.after) {
+        setPicture(res.after);
+      } else if (preset?.values) {
+        setPicture((prev) => prev ? { ...prev, ...preset.values } : prev);
+      }
+    } catch (e) {
+      try {
+        const fresh = await api("/api/picture");
+        if (fresh) setPicture(fresh);
+      } catch (_) {}
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function syncPreset(id) {
+    const preset = presets.find((x) => x.id === id);
+    if (preset?.builtin) {
+      setErr("Built-in presets are read-only");
+      return;
+    }
     setBusy(true);
     try {
-      await api(`/api/presets/${id}/sync`, { method: "POST", body: { values: picture } });
+      const values = extractWritableValues(picture);
+      await api(`/api/presets/${id}/sync`, { method: "POST", body: { values } });
       setPresets(await api("/api/presets"));
     } catch (e) { setErr(String(e)); }
     finally { setBusy(false); }
   }
 
   async function deletePreset(id, name) {
+    const preset = presets.find((x) => x.id === id);
+    if (preset?.builtin) {
+      setErr("Built-in presets cannot be deleted");
+      return;
+    }
     const ok = await askConfirm({ title: "Delete preset", message: `Delete "${name}"?`, okLabel: "Delete", danger: true });
     if (!ok) return;
     setBusy(true);
@@ -459,7 +495,12 @@ export default function App() {
     }
     setBusy(true);
     try {
-      await liveCall(`/api/power/${action}`, { method: "POST" }, 3000);
+      const res = await liveCall(`/api/power/${action}`, { method: "POST" }, 3000);
+      if (res && res.pending) {
+        setTimeout(() => {
+          api("/api/state").then(setState).catch(() => {});
+        }, 1500);
+      }
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -1357,7 +1398,7 @@ function InfoSheet({ onClose }) {
   const [error, setError] = useState(null);
   const [live, setLive] = useState(false);
   const [filter, setFilter] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState(null);
 
   const fetchInfo = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -1392,11 +1433,38 @@ function InfoSheet({ onClose }) {
 
   async function copyJson() {
     if (!info) return;
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(info, null, 2));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch (_) { }
+    const text = JSON.stringify(info.raw || info, null, 2);
+    let ok = false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (_) {
+        ok = false;
+      }
+    }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "absolute";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch (_) {
+        ok = false;
+      }
+    }
+    if (ok) {
+      setCopyStatus("copied");
+      setTimeout(() => setCopyStatus(null), 1800);
+    } else {
+      setCopyStatus("failed");
+      setTimeout(() => setCopyStatus(null), 3000);
+    }
   }
 
   const summary = info?.summary || {};
@@ -1704,7 +1772,7 @@ function InfoSheet({ onClose }) {
                           copyJson();
                         }}
                       >
-                        {copied ? "Copied" : "Copy JSON"}
+                        {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : "Copy JSON"}
                       </button>
                     </span>
                   </summary>

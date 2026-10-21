@@ -1422,6 +1422,8 @@ ul.presets {
   color: #d1d1d6;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .info-footer {
