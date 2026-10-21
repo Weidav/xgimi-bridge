@@ -211,6 +211,55 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 - **The bridge needs ADB-over-TCP enabled on the projector** to authorize itself. Anyone else on the same LAN who can reach port 5555 already has full ADB access — this isn't worse than what ADB-over-TCP already gives you. (On most XGIMI firmware this is enabled by default; if not, run `setprop service.adb.tcp.port 5555` and restart `adbd`).
 
 
+## Security model & isolated LAN deployment
+
+The bridge is designed for direct HTTP operation on an **isolated, trusted local network**.
+- **No API tokens, passwords, or client pairing**: Network isolation is the access boundary. Any device reachable on the local LAN may control the projector.
+- **RequestPolicy protection**: While authentication is intentionally excluded per owner deployment choice, cross-origin drive-by attacks and DNS rebinding from malicious websites are blocked:
+  - Canonical `Host` validation: Only requests naming the projector's local IP address, `localhost` (loopback), or explicitly configured local DNS aliases (e.g. configured via `LauncherActivity`) are accepted.
+  - Strict `Origin` checks: Mutations require a matching LAN origin or an absent origin (for native clients like Home Assistant and curl). Wildcard CORS is disabled.
+- **Wake security**: The wake listener on port 8081 accepts only valid `POST /wake` requests with an empty body and approved Host/Origin. Bare TCP accepts or GET requests do not wake the display.
+
+## HTTP limits & error semantics
+
+The bridge implements strict HTTP/1.1 limits and resource bounds:
+- **Port 8080 (API & Web)**: 64 KB decoded body ceiling, 16 KB request line + headers, 64 max headers, 10 s total request deadline, 5 s write watchdog, admission control of 64 total active connections (max 8 per peer address).
+- **Port 8081 (Wake listener)**: 0 bytes body, 1 s deadline, admission control of 8 total connections (max 2 per peer address).
+- **Consistent Error Codes**: Failed requests return explicit JSON error bodies with `ok: false`:
+  - `400` (`invalid_request`): Malformed JSON, depth > 16, trailing data, non-integral values, or out-of-range knobs.
+  - `403` (`request_forbidden` / `builtin_read_only`): Disallowed Host/Origin or attempted modification/deletion of built-in presets.
+  - `404` (`not_found`): Unknown routes or preset IDs.
+  - `405` (`method_not_allowed`): Incorrect HTTP method (includes `Allow` header).
+  - `408` (`request_timeout`): Request deadline exceeded.
+  - `413` (`limit_exceeded`): Payload/text exceeds length bounds or storage quotas.
+  - `415` (`unsupported_media_type`): Non-empty body with incompatible Content-Type.
+  - `502` (`device_write_failed`): Hardware setter returned false or readback non-convergence. Returns partial outcome `{ applied: [...], failed: "..." }`.
+  - `503` (`busy`): Mutation lock held (>250 ms) or admission limit reached.
+- **Power Actions**: Power commands return `202 Accepted` with `{ "accepted": true, "pending": true }` separating command acceptance from observed transition.
+
+## Preset storage durability & quotas
+
+- **AtomicFile Persistence**: Writes use Android `AtomicFile` (`.bak` rollbacks and fsync) to eliminate partial-write file corruption.
+- **Quotas**: Maximum of 100 custom presets, 256 KB max store size, and 80 code points per preset name.
+- **Corrupt File Preservation**: Corrupt stores are never overwritten or reset with defaults automatically; they are preserved as-is with explicit errors returned to allow recovery.
+- **Recovery Backup**: Stored at `presets.json.recovery`.
+- **Read-Only Built-ins**: Built-in presets (`balanced`) are read-only and return 403 on edit/delete.
+
+## Automated regression tests
+
+The repository includes automated regression test suites covering the JVM server, Home Assistant integration, web frontend, and installer tooling:
+
+```bash
+# Run the complete test matrix
+./tests/run_all_tests.sh
+
+# Run individual test suites
+./tests/run_jvm_tests.sh        # JVM core: MiniHttp, RequestPolicy, SettingRules, DeviceCommands, PresetStore, Wake
+./tests/run_ha_tests.sh         # Home Assistant: options flow, coordinator responses, entity error handling, unload
+node --test tests/web/test_web.mjs # Web client: writable fields filtering, api errors, slider coalescing
+./tests/tooling/test_tooling.sh # Tooling: path spaces, USB serial preservation, target parsing
+```
+
 ## Custom keycodes
 
 The web client uses standard Android keycodes for most buttons (`KEYCODE_DPAD_*`, `KEYCODE_BACK`, `KEYCODE_VOLUME_*`, etc.) and a few Xgimi-custom ones:
