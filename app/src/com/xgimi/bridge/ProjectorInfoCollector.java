@@ -20,6 +20,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -1051,148 +1052,167 @@ public class ProjectorInfoCollector {
         }
     }
 
-    private static String formatDolbyVisionMode(int mode) {
-        if (mode < 0) return null;
-        switch (mode) {
-            case 0: return "Inactive (0)";
-            case 1: return "Dolby Vision Bright (1)";
-            case 2: return "Dolby Vision Dark (2)";
-            case 3: return "Dolby Vision Game (3)";
-            case 4: return "Dolby Vision Custom (4)";
-            default: return "Mode " + mode;
+    // --- Static Enum Lookup Tables & Generic Formatter ---
+
+    private static String formatEnum(String[] table, int index, String fallbackPrefix) {
+        if (index < 0) return null;
+        if (table != null && index < table.length && table[index] != null) {
+            return table[index];
         }
+        return fallbackPrefix != null ? fallbackPrefix + " " + index : String.valueOf(index);
+    }
+
+    private static String formatEnumMap(Map<Integer, String> map, int key, String fallbackPrefix) {
+        if (key < 0) return null;
+        if (map != null && map.containsKey(key)) {
+            return map.get(key);
+        }
+        return fallbackPrefix != null ? fallbackPrefix + " " + key : String.valueOf(key);
+    }
+
+    private static final String[] DOLBY_VISION_MODES = {
+        "Inactive (0)", "Dolby Vision Bright (1)", "Dolby Vision Dark (2)", "Dolby Vision Game (3)", "Dolby Vision Custom (4)"
+    };
+    private static final String[] COLOR_TEMPS = {
+        "System (0)", "Warm (1)", "Standard (2)", "Cold / Cool (3)", "User / Custom (4)"
+    };
+    private static final String[] GAME_MODES = {
+        "Off (0)", "Standard Low Latency (1)", "Boost Ultra Low Latency (2)"
+    };
+    private static final String[] MEMC_LEVELS = {
+        "Off (0)", "Low (1)", "Medium (2)", "High (3)", "Real Cinema 24p (4)"
+    };
+    private static final String[] OFF_LOW_MED_HIGH = {
+        "Off (0)", "Low / On (1)", "Medium (2)", "High (3)"
+    };
+    private static final String[] HDMI_RANGES = {
+        "Auto (0)", "Full (0–255) (1)", "Limited (16–235) (2)"
+    };
+    private static final String[] ASPECT_RATIOS = {
+        "Auto / 16:9 (0)", "16:9 (1)", "Auto / Original (2)", "4:3 (3)", "Point-to-Point (4)"
+    };
+    private static final String[] EDID_VERSIONS = {
+        "Auto (0)", "HDMI 2.0 / Standard (1)", "HDMI 2.1 / Enhanced (2)", "HDMI 1.4 / Legacy (3)"
+    };
+    private static final String[] THREE_D_MODES = {
+        null, "2D / Off (1)", "Frame Packing 3D (2)", "Side-by-Side (3)", "Top-and-Bottom (4)"
+    };
+    private static final String[] AUDIO_OUTPUT_DEVICES = {
+        "Internal Speakers (0)", "Headphone / Line Out (1)", "HDMI ARC / eARC (2)", "SPDIF / Optical (3)", "Bluetooth Audio (4)", "USB Audio (5)"
+    };
+    private static final String[] ARC_TYPES = {
+        "PCM (0)", "Auto (1)", "Pass-Through (2)", "Dolby Digital (AC-3) (3)", "Dolby Digital Plus (E-AC-3) (4)"
+    };
+    private static final String[] SPDIF_TYPES = {
+        "PCM (0)", "Auto / Dolby Digital (1)", "Pass-Through / RAW (2)"
+    };
+    private static final String[] EARC_STATUSES = {
+        "Idle / Disconnected (0)", "ARC Pending / Handshaking (1)", "ARC Connected (2)", "eARC Connected (Full Bandwidth) (3)"
+    };
+    private static final String[] SOUND_MODES = {
+        "Film / Movie (0)", "Music (1)", "Sports / Balanced (2)", "User / Custom (3)", "Game (4)"
+    };
+    private static final String[] SOUND_PROCESS_TYPES = {
+        "Harman / Standard (0)", "Dolby Audio (1)", "DTS Studio Sound / Virtual:X (2)"
+    };
+    private static final String[] PROJECTOR_PUT_MODES = {
+        "Front Table (0)", "Front Ceiling (1)", "Rear Table (2)", "Rear Ceiling (3)"
+    };
+    private static final String[] KEYSTONE_MODES = {
+        "Off / Native (0)", "Vertical Keystone (1)", "4-Point / Auto Keystone (2)", "8-Point Keystone (3)"
+    };
+
+    private static final Map<Integer, String> PICTURE_MODES = new HashMap<>();
+    static {
+        PICTURE_MODES.put(0, "Standard (0)");
+        PICTURE_MODES.put(1, "Movie (1)");
+        PICTURE_MODES.put(2, "Vivid / Highlight (2)");
+        PICTURE_MODES.put(3, "User / Custom (3)");
+        PICTURE_MODES.put(4, "Game (4)");
+        PICTURE_MODES.put(5, "Monitor (5)");
+        PICTURE_MODES.put(6, "Office (6)");
+        PICTURE_MODES.put(9, "Football / Sport (9)");
+        PICTURE_MODES.put(14, "Filmmaker Mode (14)");
+        PICTURE_MODES.put(18, "IMAX Enhanced (18)");
+    }
+
+    private static final Map<Integer, String> COLOR_SPACES = new HashMap<>();
+    static {
+        COLOR_SPACES.put(0, "Auto (0)");
+        COLOR_SPACES.put(1, "BT.2020 (1)");
+        COLOR_SPACES.put(2, "DCI-P3 (2)");
+        COLOR_SPACES.put(3, "Rec.709 / sRGB (3)");
+        COLOR_SPACES.put(4, "Original / Native (4)");
+        COLOR_SPACES.put(7, "Adobe RGB (7)");
+    }
+
+    private static final Map<Integer, String> LUMINANCE_MODES = new HashMap<>();
+    static {
+        LUMINANCE_MODES.put(0, "Standard (0)");
+        LUMINANCE_MODES.put(1, "Performance / High Power (1)");
+        LUMINANCE_MODES.put(2, "Eco (2)");
+        LUMINANCE_MODES.put(3, "Energy Saving (3)");
+        LUMINANCE_MODES.put(4, "Eye Protection (4)");
+        LUMINANCE_MODES.put(6, "Custom (6)");
+        LUMINANCE_MODES.put(13, "Eco (13)");
+        LUMINANCE_MODES.put(15, "Ultra Performance / Boost (15)");
+        LUMINANCE_MODES.put(16, "Standard / Eye Comfort (16)");
+        LUMINANCE_MODES.put(17, "Bright (17)");
+        LUMINANCE_MODES.put(18, "Super Performance (18)");
+    }
+
+    private static String formatDolbyVisionMode(int mode) {
+        return formatEnum(DOLBY_VISION_MODES, mode, "Mode");
     }
 
     private static String formatLuminanceMode(int dlpMode, int gmSetting) {
         int m = dlpMode >= 0 ? dlpMode : gmSetting;
-        switch (m) {
-            case 0: return "Standard (0)";
-            case 1: return "Performance / High Power (1)";
-            case 2: return "Eco (2)";
-            case 3: return "Energy Saving (3)";
-            case 4: return "Eye Protection (4)";
-            case 6: return "Custom (6)";
-            case 13: return "Eco (13)";
-            case 15: return "Ultra Performance / Boost (15)";
-            case 16: return "Standard / Eye Comfort (16)";
-            case 17: return "Bright (17)";
-            case 18: return "Super Performance (18)";
-            default:
-                if (m >= 1 && m <= 10) return "Standard (Level " + m + "/10)";
-                return m < 0 ? null : "Mode " + m;
-        }
+        if (m < 0) return null;
+        String mapped = LUMINANCE_MODES.get(m);
+        if (mapped != null) return mapped;
+        if (m >= 1 && m <= 10) return "Standard (Level " + m + "/10)";
+        return "Mode " + m;
     }
 
     private static String formatPictureMode(int mode) {
-        switch (mode) {
-            case 0: return "Standard (0)";
-            case 1: return "Movie (1)";
-            case 2: return "Vivid / Highlight (2)";
-            case 3: return "User / Custom (3)";
-            case 4: return "Game (4)";
-            case 5: return "Monitor (5)";
-            case 6: return "Office (6)";
-            case 9: return "Football / Sport (9)";
-            case 14: return "Filmmaker Mode (14)";
-            case 18: return "IMAX Enhanced (18)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnumMap(PICTURE_MODES, mode, "Mode");
     }
 
     private static String formatColorTemp(int mode) {
-        switch (mode) {
-            case 0: return "System (0)";
-            case 1: return "Warm (1)";
-            case 2: return "Standard (2)";
-            case 3: return "Cold / Cool (3)";
-            case 4: return "User / Custom (4)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnum(COLOR_TEMPS, mode, "Mode");
     }
 
     private static String formatGameMode(int mode) {
-        switch (mode) {
-            case 0: return "Off (0)";
-            case 1: return "Standard Low Latency (1)";
-            case 2: return "Boost Ultra Low Latency (2)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnum(GAME_MODES, mode, "Mode");
     }
 
     private static String formatMemcLevel(int level) {
-        switch (level) {
-            case 0: return "Off (0)";
-            case 1: return "Low (1)";
-            case 2: return "Medium (2)";
-            case 3: return "High (3)";
-            case 4: return "Real Cinema 24p (4)";
-            default: return level < 0 ? null : "Level " + level;
-        }
+        return formatEnum(MEMC_LEVELS, level, "Level");
     }
 
     private static String formatOffLowMedHigh(int level) {
-        if (level < 0) return null;
-        switch (level) {
-            case 0: return "Off (0)";
-            case 1: return "Low / On (1)";
-            case 2: return "Medium (2)";
-            case 3: return "High (3)";
-            default: return "Level " + level;
-        }
+        return formatEnum(OFF_LOW_MED_HIGH, level, "Level");
     }
 
     private static String formatColorSpace(int cs) {
-        switch (cs) {
-            case 0: return "Auto (0)";
-            case 1: return "BT.2020 (1)";
-            case 2: return "DCI-P3 (2)";
-            case 3: return "Rec.709 / sRGB (3)";
-            case 4: return "Original / Native (4)";
-            case 7: return "Adobe RGB (7)";
-            default: return cs < 0 ? null : "Color Space " + cs;
-        }
+        return formatEnumMap(COLOR_SPACES, cs, "Color Space");
     }
 
     private static String formatHdmiRange(int range) {
-        switch (range) {
-            case 0: return "Auto (0)";
-            case 1: return "Full (0–255) (1)";
-            case 2: return "Limited (16–235) (2)";
-            default: return "Range " + range;
-        }
+        return formatEnum(HDMI_RANGES, range, "Range");
     }
 
     private static String formatAspectRatio(int ar) {
-        switch (ar) {
-            case 0: return "Auto / 16:9 (0)";
-            case 1: return "16:9 (1)";
-            case 2: return "Auto / Original (2)";
-            case 3: return "4:3 (3)";
-            case 4: return "Point-to-Point (4)";
-            default: return ar < 0 ? null : "Mode " + ar;
-        }
+        return formatEnum(ASPECT_RATIOS, ar, "Mode");
     }
 
     private static String formatEdidVersion(int edid) {
-        switch (edid) {
-            case 0: return "Auto (0)";
-            case 1: return "HDMI 2.0 / Standard (1)";
-            case 2: return "HDMI 2.1 / Enhanced (2)";
-            case 3: return "HDMI 1.4 / Legacy (3)";
-            default: return edid < 0 ? null : "Version " + edid;
-        }
+        return formatEnum(EDID_VERSIONS, edid, "Version");
     }
 
     private static String format3dMode(int mode3d, boolean is3dTo2d) {
         if (mode3d <= 0) return "Off (2D)";
-        String base;
-        switch (mode3d) {
-            case 1: base = "2D / Off (1)"; break;
-            case 2: base = "Frame Packing 3D (2)"; break;
-            case 3: base = "Side-by-Side (3)"; break;
-            case 4: base = "Top-and-Bottom (4)"; break;
-            default: base = "Mode " + mode3d; break;
-        }
+        String base = formatEnum(THREE_D_MODES, mode3d, "Mode");
         return is3dTo2d ? base + " (3D-to-2D Active)" : base;
     }
 
@@ -1200,15 +1220,10 @@ public class ProjectorInfoCollector {
         if (fwRoute != null && !fwRoute.isEmpty()) {
             return fwRoute;
         }
-        switch (gmpfOut) {
-            case 0: return "Internal Speakers (0)";
-            case 1: return "Headphone / Line Out (1)";
-            case 2: return "HDMI ARC / eARC (2)";
-            case 3: return "SPDIF / Optical (3)";
-            case 4: return "Bluetooth Audio (4)";
-            case 5: return "USB Audio (5)";
-            default: return aidlOut >= 0 ? "Device " + aidlOut : null;
+        if (gmpfOut >= 0 && gmpfOut < AUDIO_OUTPUT_DEVICES.length) {
+            return AUDIO_OUTPUT_DEVICES[gmpfOut];
         }
+        return aidlOut >= 0 ? "Device " + aidlOut : null;
     }
 
     private static String formatDigitalAudioFormat(String prop, int aidlFmt, int arcType) {
@@ -1227,74 +1242,32 @@ public class ProjectorInfoCollector {
     }
 
     private static String formatArcType(int arcType) {
-        switch (arcType) {
-            case 0: return "PCM (0)";
-            case 1: return "Auto (1)";
-            case 2: return "Pass-Through (2)";
-            case 3: return "Dolby Digital (AC-3) (3)";
-            case 4: return "Dolby Digital Plus (E-AC-3) (4)";
-            default: return arcType < 0 ? null : "Mode " + arcType;
-        }
+        return formatEnum(ARC_TYPES, arcType, "Mode");
     }
 
     private static String formatSpdifType(int gmpfSpdif, int settingSpdif) {
         int v = gmpfSpdif >= 0 ? gmpfSpdif : settingSpdif;
-        switch (v) {
-            case 0: return "PCM (0)";
-            case 1: return "Auto / Dolby Digital (1)";
-            case 2: return "Pass-Through / RAW (2)";
-            default: return v < 0 ? null : "Mode " + v;
-        }
+        return formatEnum(SPDIF_TYPES, v, "Mode");
     }
 
     private static String formatEarcStatus(int status) {
-        switch (status) {
-            case 0: return "Idle / Disconnected (0)";
-            case 1: return "ARC Pending / Handshaking (1)";
-            case 2: return "ARC Connected (2)";
-            case 3: return "eARC Connected (Full Bandwidth) (3)";
-            default: return status < 0 ? null : "State " + status;
-        }
+        return formatEnum(EARC_STATUSES, status, "State");
     }
 
     private static String formatSoundMode(int mode) {
-        switch (mode) {
-            case 0: return "Film / Movie (0)";
-            case 1: return "Music (1)";
-            case 2: return "Sports / Balanced (2)";
-            case 3: return "User / Custom (3)";
-            case 4: return "Game (4)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnum(SOUND_MODES, mode, "Mode");
     }
 
     private static String formatSoundProcessType(int type) {
-        switch (type) {
-            case 0: return "Harman / Standard (0)";
-            case 1: return "Dolby Audio (1)";
-            case 2: return "DTS Studio Sound / Virtual:X (2)";
-            default: return type < 0 ? null : "Processor " + type;
-        }
+        return formatEnum(SOUND_PROCESS_TYPES, type, "Processor");
     }
 
     private static String formatProjectorPutMode(int mode) {
-        switch (mode) {
-            case 0: return "Front Table (0)";
-            case 1: return "Front Ceiling (1)";
-            case 2: return "Rear Table (2)";
-            case 3: return "Rear Ceiling (3)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnum(PROJECTOR_PUT_MODES, mode, "Mode");
     }
 
     private static String formatKeystoneMode(int mode) {
-        switch (mode) {
-            case 0: return "Off / Native (0)";
-            case 1: return "Vertical Keystone (1)";
-            case 2: return "4-Point / Auto Keystone (2)";
-            case 3: return "8-Point Keystone (3)";
-            default: return mode < 0 ? null : "Mode " + mode;
-        }
+        return formatEnum(KEYSTONE_MODES, mode, "Mode");
     }
 
     private static String fmtDouble(double d) {
