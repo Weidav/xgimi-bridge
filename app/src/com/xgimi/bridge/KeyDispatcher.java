@@ -281,6 +281,9 @@ public class KeyDispatcher {
     private static Object cachedTof = null;
     private static Object cachedAmbient = null;
     private static long cachedTofTs = 0;
+    private static JSONArray cachedSensors = null;
+    private static JSONArray cachedFans = null;
+    private static long cachedThermalTs = 0;
 
     private static JSONObject collectHardwareInfo() {
         JSONObject root = new JSONObject();
@@ -495,38 +498,56 @@ public class KeyDispatcher {
             putSafe(tObj, "pumpRpm", callByteArg(temp, "getPumpRotationRate", 0));
             putSafe(tObj, "tecSpeed", callByteArg(temp, "getTECSpeed", 0));
 
-            // Probe all 12 standard XGIMI factory sensor indices (0..11)
-            JSONArray sensors = new JSONArray();
-            for (int i = 0; i < SENSOR_NAMES.length; i++) {
-                Object valI = callByteArg(temp, "getTemperatureFromSensor", i);
-                if (valI instanceof Number) {
-                    int tempVal = ((Number) valI).intValue();
-                    if (tempVal > 0 && tempVal < 150) {
-                        JSONObject s = new JSONObject();
-                        putSafe(s, "index", i);
-                        putSafe(s, "name", SENSOR_NAMES[i]);
-                        putSafe(s, "tempC", tempVal);
-                        sensors.put(s);
-                    }
+            // Probe standard factory sensors and fans (cached for 5 seconds)
+            JSONArray sensors = null;
+            JSONArray fans = null;
+            long nowThermal = System.currentTimeMillis();
+            synchronized (TELEMETRY_CACHE_LOCK) {
+                if (cachedSensors != null && (nowThermal - cachedThermalTs < 5000)) {
+                    sensors = cachedSensors;
+                    fans = cachedFans;
                 }
             }
+
+            if (sensors == null) {
+                sensors = new JSONArray();
+                for (int i = 0; i < SENSOR_NAMES.length; i++) {
+                    Object valI = callByteArg(temp, "getTemperatureFromSensor", i);
+                    if (valI instanceof Number) {
+                        int tempVal = ((Number) valI).intValue();
+                        if (tempVal > 0 && tempVal < 150) {
+                            JSONObject s = new JSONObject();
+                            putSafe(s, "index", i);
+                            putSafe(s, "name", SENSOR_NAMES[i]);
+                            putSafe(s, "tempC", tempVal);
+                            sensors.put(s);
+                        }
+                    }
+                }
+
+                fans = new JSONArray();
+                for (int i = 0; i < 4; i++) {
+                    Object rpmObj = callByteArg(temp, "getFanRotationRate", i);
+                    if (rpmObj instanceof Number) {
+                        int rpm = ((Number) rpmObj).intValue();
+                        if (rpm > 0 && rpm < 30000) {
+                            JSONObject f = new JSONObject();
+                            putSafe(f, "index", i);
+                            putSafe(f, "rpm", rpm);
+                            fans.put(f);
+                        }
+                    }
+                }
+
+                synchronized (TELEMETRY_CACHE_LOCK) {
+                    cachedSensors = sensors;
+                    cachedFans = fans;
+                    cachedThermalTs = nowThermal;
+                }
+            }
+
             putSafe(tObj, "sensorCount", sensors.length());
             putSafe(tObj, "sensors", sensors);
-
-            // Probe fan indices 0..3 directly
-            JSONArray fans = new JSONArray();
-            for (int i = 0; i < 4; i++) {
-                Object rpmObj = callByteArg(temp, "getFanRotationRate", i);
-                if (rpmObj instanceof Number) {
-                    int rpm = ((Number) rpmObj).intValue();
-                    if (rpm > 0 && rpm < 30000) {
-                        JSONObject f = new JSONObject();
-                        putSafe(f, "index", i);
-                        putSafe(f, "rpm", rpm);
-                        fans.put(f);
-                    }
-                }
-            }
             putSafe(tObj, "fanCount", fans.length());
             putSafe(tObj, "fans", fans);
             putSafe(root, "thermal", tObj);
