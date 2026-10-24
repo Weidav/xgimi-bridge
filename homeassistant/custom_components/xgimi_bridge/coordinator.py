@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -13,7 +15,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CAST_WAKE_PORT, DEFAULT_PORT, REMOTE_WAKE_PORT, WAKE_PORT
+from .const import (
+    CAST_WAKE_PORT,
+    DEFAULT_PORT,
+    REMOTE_WAKE_PORT,
+    WAKE_PORT,
+    WOL_WAKE_PORT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(seconds=10)
@@ -24,6 +32,31 @@ def format_host(host: str) -> str:
     if ":" in host and not host.startswith("["):
         return f"[{host}]"
     return host
+
+
+def _send_udp_knock(host: str, port: int, payload: bytes = b"\x00") -> None:
+    """Send a best-effort UDP wake knock without blocking."""
+    clean_host = host.strip("[]")
+    is_ipv6 = ":" in clean_host
+    sock_family = socket.AF_INET6 if is_ipv6 else socket.AF_INET
+    try:
+        sock = socket.socket(sock_family, socket.SOCK_DGRAM)
+        sock.setblocking(False)
+        sock.sendto(payload, (clean_host, port))
+        sock.close()
+    except Exception as err:
+        _LOGGER.debug("UDP wake knock to %s:%s failed: %s", host, port, err)
+
+
+async def _send_tcp_knock(host: str, port: int, timeout: float = 0.4) -> None:
+    """Send a quick TCP connection attempt to trigger WoWLAN."""
+    try:
+        conn = asyncio.open_connection(host, port)
+        _, writer = await asyncio.wait_for(conn, timeout=timeout)
+        writer.close()
+        await writer.wait_closed()
+    except (OSError, TimeoutError) as err:
+        _LOGGER.debug("TCP WoWLAN knock on port %s: %s", port, err)
 
 
 class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -51,6 +84,7 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.session = session if session is not None else async_get_clientsession(hass)
         self._unloaded = False
         self._refresh_tasks: set[asyncio.TimerHandle | asyncio.Task[Any]] = set()
+        self._power_transition_until: float = 0.0
         self._last_data: dict[str, Any] = {
             "awake": False,
             "online": False,
@@ -91,6 +125,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         pic_url = f"http://{self.formatted_host}:{DEFAULT_PORT}/api/picture"
         presets_url = f"http://{self.formatted_host}:{DEFAULT_PORT}/api/presets"
 
+        now = time.monotonic()
+        in_transition = now < self._power_transition_until
+
         try:
             async with self.session.get(
                 pic_url, timeout=aiohttp.ClientTimeout(total=3.0)
@@ -98,15 +135,24 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if resp.status == 200:
                     pic = await resp.json()
                     self._last_data["picture"] = pic
-                    self._last_data["awake"] = bool(pic.get("awake", True))
                     self._last_data["online"] = True
+                    is_awake = bool(pic.get("awake", True))
+                    if in_transition:
+                        if self._last_data["awake"] and is_awake:
+                            self._power_transition_until = 0.0
+                        elif not self._last_data["awake"] and not is_awake:
+                            self._power_transition_until = 0.0
+                    else:
+                        self._last_data["awake"] = is_awake
                 else:
-                    self._last_data["awake"] = False
-                    self._last_data["online"] = False
+                    if not in_transition:
+                        self._last_data["awake"] = False
+                        self._last_data["online"] = False
         except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.debug("Picture state request failed (standby or offline): %s", err)
-            self._last_data["awake"] = False
-            self._last_data["online"] = False
+            if not in_transition:
+                self._last_data["awake"] = False
+                self._last_data["online"] = False
 
         if self._last_data["online"]:
             try:
@@ -127,54 +173,81 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._unloaded:
             return False
 
-        # Step 1: TCP knock on WoWLAN ports to wake the MediaTek CPU from STR suspend
-        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT):
-            try:
-                conn = asyncio.open_connection(self.host, port)
-                _, writer = await asyncio.wait_for(conn, timeout=0.8)
-                writer.close()
-                await writer.wait_closed()
-            except (OSError, TimeoutError) as err:
-                _LOGGER.debug("WoWLAN knock on port %s: %s", port, err)
+        # Step 1: Rapid WoWLAN knocks (UDP + TCP in parallel) to wake CPU from STR
+        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT, WOL_WAKE_PORT):
+            _send_udp_knock(self.host, port)
 
-        await asyncio.sleep(0.8)
+        await asyncio.gather(
+            _send_tcp_knock(self.host, CAST_WAKE_PORT, timeout=0.4),
+            _send_tcp_knock(self.host, REMOTE_WAKE_PORT, timeout=0.4),
+            return_exceptions=True,
+        )
 
-        # Step 2: Hit shell-UID wake listener on port 8081 (KeyDispatcher)
+        # Brief burst: repeat UDP knock after 100ms
+        await asyncio.sleep(0.1)
+        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT, WOL_WAKE_PORT):
+            _send_udp_knock(self.host, port)
+
+        await asyncio.sleep(0.4)
+
+        # Step 2: Hit shell-UID wake listener on port 8081 (KeyDispatcher) and port 8080
         woke = False
-        wake_url = f"http://{self.formatted_host}:{WAKE_PORT}/wake"
-        for _ in range(4):
-            try:
-                async with self.session.post(
-                    wake_url, timeout=aiohttp.ClientTimeout(total=1.2)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data and data.get("ok") is not False:
-                            woke = True
-                            break
-            except (aiohttp.ClientError, TimeoutError):
-                await asyncio.sleep(0.6)
-
         fallback_ok = False
-        # Fallback to standard power/on if wake didn't confirm
-        if not woke:
+        wake_url = f"http://{self.formatted_host}:{WAKE_PORT}/wake"
+        on_url = f"http://{self.formatted_host}:{DEFAULT_PORT}/api/power/on"
+
+        deadline = time.monotonic() + 16.0  # 16-second total wake window
+        attempts = 0
+        max_attempts = 8
+
+        while time.monotonic() < deadline and attempts < max_attempts:
+            attempts += 1
+            if not woke:
+                try:
+                    async with self.session.post(
+                        wake_url, timeout=aiohttp.ClientTimeout(total=1.2)
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data and data.get("ok") is not False:
+                                woke = True
+                except (aiohttp.ClientError, TimeoutError):
+                    pass
+
+            if woke:
+                # Wake acknowledged by KeyDispatcher; confirm with best-effort power/on
+                try:
+                    async with self.session.post(
+                        on_url, timeout=aiohttp.ClientTimeout(total=1.0)
+                    ) as resp:
+                        if resp.status in (200, 202):
+                            fallback_ok = True
+                except (aiohttp.ClientError, TimeoutError):
+                    pass
+                break
+
+            # If port 8081 did not respond, try port 8080 fallback
             try:
-                on_url = f"http://{self.formatted_host}:{DEFAULT_PORT}/api/power/on"
                 async with self.session.post(
-                    on_url, timeout=aiohttp.ClientTimeout(total=1.5)
+                    on_url, timeout=aiohttp.ClientTimeout(total=1.2)
                 ) as resp:
                     if resp.status in (200, 202):
                         data = await resp.json()
                         if data and data.get("ok") is not False:
                             fallback_ok = True
+                            break
             except (aiohttp.ClientError, TimeoutError) as err:
-                _LOGGER.debug("Fallback power on request failed: %s", err)
+                _LOGGER.debug("Power on request during wake attempt: %s", err)
+
+            await asyncio.sleep(0.5)
 
         if woke or fallback_ok:
             self._last_data["awake"] = True
             self._last_data["online"] = True
+            self._power_transition_until = time.monotonic() + 10.0
             self.async_set_updated_data(self._last_data)
-            self._schedule_delayed_refresh(2.0)
+            self._schedule_delayed_refresh(3.0)
+            self._schedule_delayed_refresh(6.0)
             return True
 
         return False
@@ -198,8 +271,10 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if success:
             self._last_data["awake"] = False
+            self._power_transition_until = time.monotonic() + 10.0
             self.async_set_updated_data(self._last_data)
-        self._schedule_delayed_refresh(2.0)
+        self._schedule_delayed_refresh(3.0)
+        self._schedule_delayed_refresh(6.0)
         return success
 
     async def async_post_json(

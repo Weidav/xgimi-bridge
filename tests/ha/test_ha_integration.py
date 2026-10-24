@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -137,7 +138,7 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(coordinator.data["awake"])
             self.assertTrue(coordinator.data["online"])
 
-            # Case 2: Wake fails and fallback succeeds
+            # Case 2: Wake on 8081 fails, fallback on 8080 succeeds
             coordinator.data["awake"] = False
             coordinator.data["online"] = False
 
@@ -149,9 +150,9 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
             fallback_ok.status = 202
             fallback_ok.json = AsyncMock(return_value={"accepted": True, "pending": True})
 
-            # Return wake_fail 4 times (for the loop), then fallback_ok
+            # 8081 returns wake_fail, then 8080 returns fallback_ok
             session.post.return_value.__aenter__.side_effect = [
-                wake_fail, wake_fail, wake_fail, wake_fail, fallback_ok
+                wake_fail, fallback_ok
             ]
 
             res2 = await coordinator.async_turn_on()
@@ -159,20 +160,29 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(coordinator.data["awake"])
             self.assertTrue(coordinator.data["online"])
 
-            # Case 3: Both wake and fallback fail -> returns False, does NOT set awake/online
+            # Case 3: Retries through wake failures before succeeding
             coordinator.data["awake"] = False
             coordinator.data["online"] = False
 
-            fallback_fail = AsyncMock()
-            fallback_fail.status = 500
-            fallback_fail.json = AsyncMock(return_value={"ok": False})
-
+            # Fails on iteration 1 (8081 fail, 8080 fail), succeeds on iteration 2 (8081 ok)
             session.post.return_value.__aenter__.side_effect = [
-                wake_fail, wake_fail, wake_fail, wake_fail, fallback_fail
+                wake_fail, wake_fail, wake_resp, fallback_ok
             ]
 
             res3 = await coordinator.async_turn_on()
-            self.assertFalse(res3)
+            self.assertTrue(res3)
+            self.assertTrue(coordinator.data["awake"])
+            self.assertTrue(coordinator.data["online"])
+
+            # Case 4: Both wake and fallback fail -> returns False, does NOT set awake/online
+            coordinator.data["awake"] = False
+            coordinator.data["online"] = False
+
+            session.post.return_value.__aenter__.side_effect = aiohttp.ClientError("Host unreachable")
+
+            with patch("asyncio.sleep", AsyncMock()):
+                res4 = await coordinator.async_turn_on()
+            self.assertFalse(res4)
             self.assertFalse(coordinator.data["awake"])
             self.assertFalse(coordinator.data["online"])
 
@@ -201,6 +211,43 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
 
         res2 = await coordinator.async_turn_off()
         self.assertFalse(res2)
+
+    async def test_power_transition_state_protection(self):
+        hass = MagicMock()
+        entry = MagicMock()
+        entry.data = {"host": "192.168.1.50"}
+
+        session = MagicMock()
+        coordinator = XgimiDataUpdateCoordinator(hass, "192.168.1.50", "XGIMI", config_entry=entry, session=session)
+
+        # 1. Turn-on transition protection: transient polling failures while transitioning do NOT reset awake to False
+        coordinator._last_data["awake"] = True
+        coordinator._last_data["online"] = True
+        coordinator._power_transition_until = time.monotonic() + 10.0
+
+        # Simulate timeout on /api/picture during turn-on
+        session.get.return_value.__aenter__.side_effect = TimeoutError("Projector display initializing")
+
+        data = await coordinator._async_update_data()
+        self.assertTrue(data["awake"], "Power switch must remain ON during turn-on transition even if poll times out")
+
+        # Once /api/picture succeeds with awake: true, transition completes
+        succ_resp = AsyncMock()
+        succ_resp.status = 200
+        succ_resp.json = AsyncMock(return_value={"awake": True, "brightness": 50})
+        session.get.return_value.__aenter__.side_effect = None
+        session.get.return_value.__aenter__.return_value = succ_resp
+
+        data2 = await coordinator._async_update_data()
+        self.assertTrue(data2["awake"])
+        self.assertEqual(coordinator._power_transition_until, 0.0, "Transition flag must clear on confirmed state")
+
+        # 2. Turn-off transition protection: stale awake: true does NOT clobber awake: False
+        coordinator._last_data["awake"] = False
+        coordinator._power_transition_until = time.monotonic() + 10.0
+
+        data3 = await coordinator._async_update_data()
+        self.assertFalse(data3["awake"], "Stale awake:true must not clobber awake:False while turning off")
 
     async def test_coordinator_unload_cancels_tasks(self):
         hass = MagicMock()
