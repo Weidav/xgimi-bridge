@@ -199,6 +199,8 @@ public class AidlClient {
             public void write(Parcel p) {
                 p.writeString(key);
             }
+        });
+    }
 
 
     // ---------- video calls ----------
