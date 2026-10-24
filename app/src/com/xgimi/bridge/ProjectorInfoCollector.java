@@ -802,7 +802,6 @@ public class ProjectorInfoCollector {
                     "running_package_name",
                     "pre_package_name",
                     "HDR_Mode",
-                    "picture_advanced_performance_mode",
                     "pq_db_write_status"
             };
             for (String k : globalStrKeys) {
