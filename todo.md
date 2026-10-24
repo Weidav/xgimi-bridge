@@ -18,3 +18,6 @@ The web client uses standard Android keycodes for most buttons (`KEYCODE_DPAD_*`
 
 These pass through `injectInputEvent` and Xgimi's `PhoneWindowManager` intercept routes them the same way the physical remote does.
 ```
+- [ ] **Simplify Home Assistant Integration**:
+  - Restructure and reduce the HA integration scope to only handle Wake-on-LAN (WOL) and projector power state verification (online/offline check).
+  - Rely on the native Home Assistant Android TV integration for all navigation, media playback, volume, and remote control capabilities.
