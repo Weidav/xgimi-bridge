@@ -102,6 +102,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.34** | Version Drift Across Deliverables | Unified release versioning to `1.0.0` across `AndroidManifest.xml`, `package.json`, `manifest.json`, and `pyproject.toml`. |
 | **1.35** | No automated tests | Implemented comprehensive test suite in `tests/` covering JVM, Web, Home Assistant, and Tooling. |
 | **1.36** | README drift | Updated `README.md` with documented LAN trust model, limits, architecture, and endpoints. |
+| **2.1** | Duplication of Raw MediaTek IPq Binder IPC | Extracted identical AIDL transactions (54 & 59) against `vendor.mediatek.hardware.pq.IPq/default` into a shared `MtkPqClient` helper. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -143,11 +144,6 @@ The following items were identified during the codebase audit and remain unaddre
 ---
 
 ### Section 2: Code Duplication & Shared Code Opportunities
-
-#### 2.1 Duplication of Raw MediaTek IPq Binder IPC
-- **Files**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java) (`collectMtkPqInfo()`) and [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java) (`queryMtkPqFallback()`)
-- **Issue**: Identical AIDL transaction codes (54 and 59) executed against `vendor.mediatek.hardware.pq.IPq/default`.
-- **Future Check**: Extract into a shared `MtkPqClient` helper.
 
 #### 2.2 Duplicate Stream and File I/O Helpers
 - **Files**: `LocalAdbClient.java`, `PresetStore.java`, `HttpServer.java`.
