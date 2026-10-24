@@ -99,6 +99,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.30** | `MiniHttp.stop()` did not await executor termination | Added bounded executor termination timeout on service shutdown. |
 | **1.32** | Fragile quoting and path handling in `build.sh` | Quoted variables, array-based command arguments, target directory sanity checks. |
 | **1.33** | Timing races and device target assumptions in `install.sh` | Robust ADB device target resolution, bracketed IPv6 support, APK file verification. |
+| **1.34** | Version Drift Across Deliverables | Unified release versioning to `1.0.0` across `AndroidManifest.xml`, `package.json`, `manifest.json`, and `pyproject.toml`. |
 | **1.35** | No automated tests | Implemented comprehensive test suite in `tests/` covering JVM, Web, Home Assistant, and Tooling. |
 | **1.36** | README drift | Updated `README.md` with documented LAN trust model, limits, architecture, and endpoints. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
@@ -138,13 +139,6 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 ## Remaining Unaddressed Findings & Flaws (Kept for Future Checks)
 
 The following items were identified during the codebase audit and remain unaddressed. They are preserved here for future refactoring, optimization, and code hygiene tasks.
-
-### Section 1: Runtime & Environment Flaws
-
-#### 1.34 Version Drift Across Deliverables
-- **Files**: `app/AndroidManifest.xml` (`0.2`), `web/package.json` (`0.0.2`), `homeassistant/custom_components/xgimi_bridge/manifest.json` (`1.0.0`), `pyproject.toml` (`0.1.0`).
-- **Flaw**: No unified release versioning or single source of truth across subprojects.
-- **Future Check**: Implement release automation or unified version tagging.
 
 ---
 
