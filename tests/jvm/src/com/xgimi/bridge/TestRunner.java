@@ -13,6 +13,7 @@ public class TestRunner {
         failures += run("WakeHttpServerTest", WakeHttpServerTest::runAll);
         failures += run("HttpServerTest", HttpServerTest::runAll);
         failures += run("IoUtilsTest", IoUtilsTest::runAll);
+        failures += run("JsonUtilsTest", JsonUtilsTest::runAll);
 
         if (failures == 0) {
             System.out.println("=== ALL JVM REGRESSION TESTS PASSED ===");

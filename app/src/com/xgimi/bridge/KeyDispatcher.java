@@ -257,24 +257,7 @@ public class KeyDispatcher {
     }
 
     private static void putSafe(JSONObject o, String key, Object val) {
-        if (val == null) return;
-        try {
-            if (val instanceof String) {
-                String s = ((String) val).replace("\u0000", "").trim();
-                if (s.isEmpty()) return;
-                o.put(key, s);
-            } else if (val instanceof Float) {
-                Float f = (Float) val;
-                if (Float.isNaN(f) || Float.isInfinite(f)) return;
-                o.put(key, Math.round(f * 100.0) / 100.0);
-            } else if (val instanceof Double) {
-                Double d = (Double) val;
-                if (Double.isNaN(d) || Double.isInfinite(d)) return;
-                o.put(key, Math.round(d * 1000.0) / 1000.0);
-            } else {
-                o.put(key, val);
-            }
-        } catch (Throwable ignore) {}
+        JsonUtils.putSafe(o, key, val);
     }
 
     private static final String[] SENSOR_NAMES = {

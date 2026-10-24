@@ -38,12 +38,8 @@ public class ProjectorInfoCollector {
         JSONObject aidlJson = new JSONObject();
         try {
             Map<String, Object> aidlMap = aidl.collectAidlInfo();
-            for (Map.Entry<String, Object> e : aidlMap.entrySet()) {
-                if (e.getValue() instanceof Map) {
-                    aidlJson.put(e.getKey(), new JSONObject((Map<?, ?>) e.getValue()));
-                } else if (e.getValue() != null) {
-                    aidlJson.put(e.getKey(), e.getValue());
-                }
+            if (aidlMap != null) {
+                aidlJson = JsonUtils.mapToJson(aidlMap);
             }
         } catch (Throwable ignore) {}
 
@@ -1303,9 +1299,6 @@ public class ProjectorInfoCollector {
     }
 
     private static void put(JSONObject o, String key, Object val) {
-        if (val == null) return;
-        try {
-            o.put(key, val);
-        } catch (Throwable ignore) {}
+        JsonUtils.putSafe(o, key, val);
     }
 }

@@ -125,12 +125,7 @@ public class HttpServer extends MiniHttp {
             Map<String, Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
             snap.put("runningApp", getRunningApp(ctx));
-            for (Map.Entry<String, Object> e : snap.entrySet()) {
-                if (e.getValue() instanceof Map) {
-                    e.setValue(new JSONObject((Map<?, ?>) e.getValue()));
-                }
-            }
-            return json(Response.Status.OK, new JSONObject(snap).toString());
+            return json(Response.Status.OK, JsonUtils.mapToJson(snap).toString());
         }
 
         // /api/info

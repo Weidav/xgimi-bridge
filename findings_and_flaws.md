@@ -109,6 +109,8 @@ The following items from the original audit were addressed and resolved followin
 | **2.5** | CSS Split Rules, Dead Selectors, and Inconsistent Tokens | Removed dead `.state` selector, bound `--bg` token to `html`/`body`, consolidated duplicate `.btn` declarations with hover transitions. |
 | **2.6** | Dead Code in React Icons | Removed unrendered `PowerIcon()` SVG component from `web/src/App.jsx`. |
 | **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
+| **2.13** | `Map` -> `JSONObject` Conversion Duplication | Centralized recursive map and collection JSON serialization in `JsonUtils.mapToJson()`. |
+| **2.14** | `put` / `putSafe` Duplicated | Consolidated JSON object putters with type sanitization into `JsonUtils.putSafe()` across `KeyDispatcher` and `ProjectorInfoCollector`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -173,16 +175,6 @@ The following items were identified during the codebase audit and remain unaddre
   - `app/src/com/xgimi/bridge/ProjectorInfoCollector.java`
 - **Issue**: Adding one knob requires editing multiple files across three languages. Java server-side mapping was unified in `SettingRules`, but Web and HA still maintain separate lists.
 - **Future Check**: Expose supported knobs and definitions dynamically from a bridge endpoint (e.g. `GET /api/knobs`) or shared schema.
-
-#### 2.13 `Map` -> `JSONObject` Conversion Duplication
-- **Files**: `HttpServer.java`, `PresetStore.java`, `ProjectorInfoCollector.java`.
-- **Issue**: Identical nested Map traversal and conversion loops.
-- **Future Check**: Centralize in `JsonUtils.mapToJson()`.
-
-#### 2.14 `put` / `putSafe` Duplicated
-- **Files**: `ProjectorInfoCollector.put` and `KeyDispatcher.putSafe`.
-- **Issue**: Both swallow JSONException and sanitize types with slight behavioral discrepancies.
-- **Future Check**: Consolidate into a shared utility.
 
 #### 2.15 Binder Reflection Helpers Duplication
 - **Files**: `AidlClient.java` and `KeyDispatcher.java`.
