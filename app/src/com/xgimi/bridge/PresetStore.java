@@ -99,13 +99,8 @@ public class PresetStore {
             if (!exists) {
                 // Check if recovery file exists before declaring store absent
                 if (recoveryPath.exists() && recoveryPath.length() > 0) {
-                    try (FileInputStream in = new FileInputStream(recoveryPath);
-                         FileOutputStream out = new FileOutputStream(path)) {
-                        byte[] buf = new byte[8192];
-                        int n;
-                        while ((n = in.read(buf)) != -1) {
-                            out.write(buf, 0, n);
-                        }
+                    try {
+                        IoUtils.copyFile(recoveryPath, path);
                         Log.i(TAG, "Restored preset store from recovery copy at " + recoveryPath.getAbsolutePath());
                     } catch (IOException e) {
                         Log.w(TAG, "Failed restoring store from recovery copy: " + e.getMessage());
@@ -204,13 +199,8 @@ public class PresetStore {
 
     private void preserveRecoveryCopy() {
         if (!recoveryPath.exists() && path.exists()) {
-            try (FileInputStream in = new FileInputStream(path);
-                 FileOutputStream out = new FileOutputStream(recoveryPath)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    out.write(buf, 0, n);
-                }
+            try {
+                IoUtils.copyFile(path, recoveryPath);
                 Log.i(TAG, "Preserved recovery copy of presets at " + recoveryPath.getAbsolutePath());
             } catch (IOException e) {
                 Log.w(TAG, "Failed to preserve recovery copy of presets: " + e.getMessage());

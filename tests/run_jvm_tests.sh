@@ -18,6 +18,7 @@ javac -cp tests/jvm/lib/android-json-0.0.20131108.vaadin1.jar:tests/jvm/build \
   app/src/com/xgimi/bridge/HttpServer.java \
   app/src/com/xgimi/bridge/KeyDispatcher.java \
   app/src/com/xgimi/bridge/MtkPqClient.java \
+  app/src/com/xgimi/bridge/IoUtils.java \
   $(find tests/jvm/src -name "*.java")
 
 java -Xmx64m -cp tests/jvm/lib/android-json-0.0.20131108.vaadin1.jar:tests/jvm/build com.xgimi.bridge.TestRunner

@@ -578,20 +578,12 @@ public class LocalAdbClient {
     }
 
     // ---- File helpers ----
-
+ 
     private static byte[] readFile(File f) throws Exception {
-        try (FileInputStream in = new FileInputStream(f)) {
-            ByteArrayOutputStream b = new ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int n;
-            while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-            return b.toByteArray();
-        }
+        return IoUtils.readFile(f);
     }
 
     private static void writeFile(File f, byte[] data) throws Exception {
-        try (FileOutputStream out = new FileOutputStream(f)) {
-            out.write(data);
-        }
+        IoUtils.writeBytes(f, data);
     }
 }
