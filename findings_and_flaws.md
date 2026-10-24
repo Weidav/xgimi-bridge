@@ -159,6 +159,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.5** | `App.jsx` Monolith | Split ~1,800-line monolithic file into modular components under `web/src/components/` (`Icons.jsx`, `Controls.jsx`, `Dialog.jsx`, `SourceSheet.jsx`, `PowerSheet.jsx`, `Remote.jsx`, `InfoSheet.jsx`), reducing `App.jsx` to under 500 lines. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 | **3.12** | `HttpServer` is a Router with Inline Business Logic | Extracted TV input reflection and channel intent switching into `InputService`, implemented `Map<String, RouteHandler>` exact route map and prefix route dispatching table in `HttpServer`. |
+| **3.3** | `KeyDispatcher` Multi-Responsibility Monolith | Extracted shell hardware telemetry and dumpsys HDMI CEC parsing into `ShellTelemetryCollector`, isolating `KeyDispatcher` to input event injection and wake server. |
 
 
 ---
@@ -197,11 +198,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java)
 - **Issue**: One static class handles display, audio, optics, thermal, CEC, system properties, and MediaTek PQ AIDL calls.
 - **Future Check**: Split into modular domain collectors under `com.xgimi.bridge.collector.*` (DisplayCollector, AudioCollector, ThermalCollector, etc.).
-
-#### 3.3 `KeyDispatcher` Multi-Responsibility Monolith
-- **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java)
-- **Issue**: Combines stdin ADB key injection, dumpsys HDMI parsing, and GMPF telemetry collection.
-- **Future Check**: Extract shell telemetry into `ShellTelemetryCollector`.
 
 #### 3.4 `MiniHttp` is a Hand-Rolled HTTP Server with Unused Features
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java)

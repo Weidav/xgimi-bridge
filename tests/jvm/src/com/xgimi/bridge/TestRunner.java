@@ -17,6 +17,7 @@ public class TestRunner {
         failures += run("BinderTransactTest", BinderTransactTest::runAll);
         failures += run("HdmiInputHelperTest", HdmiInputHelperTest::runAll);
         failures += run("InputServiceTest", InputServiceTest::runAll);
+        failures += run("ShellTelemetryCollectorTest", () -> ShellTelemetryCollectorTest.main(new String[0]));
 
         if (failures == 0) {
             System.out.println("=== ALL JVM REGRESSION TESTS PASSED ===");
