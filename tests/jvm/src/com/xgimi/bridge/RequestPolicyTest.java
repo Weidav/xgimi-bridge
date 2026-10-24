@@ -22,19 +22,12 @@ public class RequestPolicyTest {
     private static void testHostValidation() {
         RequestPolicy policy = new RequestPolicy();
 
-        // Loopback is always allowed
-        assertTrue(policy.isHostAllowed("localhost:8080", 8080), "localhost:8080 should be allowed");
-        assertTrue(policy.isHostAllowed("127.0.0.1:8080", 8080), "127.0.0.1:8080 should be allowed");
-        assertTrue(policy.isHostAllowed("127.0.0.1", 8080), "127.0.0.1 without port should be allowed");
-        assertTrue(policy.isHostAllowed("[::1]:8080", 8080), "[::1]:8080 should be allowed");
-
-        // Wrong port
-        assertFalse(policy.isHostAllowed("127.0.0.1:9999", 8080), "Wrong port should be rejected");
-
-        // Disallowed external hostnames
-        assertFalse(policy.isHostAllowed("evil.com:8080", 8080), "evil.com should be rejected");
-        assertFalse(policy.isHostAllowed("attacker.org", 8080), "attacker.org should be rejected");
-        assertFalse(policy.isHostAllowed("10.99.99.99:8080", 8080), "Unknown foreign IP should be rejected");
+        // All hosts are allowed for isolated VLAN / reverse proxy deployments
+        assertTrue(policy.isHostAllowed("localhost:8080", 8080), "localhost:8080 allowed");
+        assertTrue(policy.isHostAllowed("127.0.0.1:8080", 8080), "127.0.0.1:8080 allowed");
+        assertTrue(policy.isHostAllowed("xgimi.local.whitestoner.com", 8080), "Traefik reverse proxy host allowed");
+        assertTrue(policy.isHostAllowed("xgimi.local.whitestoner.com:443", 8080), "Traefik HTTPS port 443 host allowed");
+        assertTrue(policy.isHostAllowed("192.168.11.11:8080", 8080), "LAN IP host allowed");
     }
 
     private static void testAliasConfiguration() throws Exception {
@@ -44,16 +37,13 @@ public class RequestPolicyTest {
             RequestPolicy policy = new RequestPolicy(tempDir);
             policy.setAliases(Arrays.asList("xgimi.local", "projector.home.", "MY-PROJECTOR"));
 
-            assertTrue(policy.isHostAllowed("xgimi.local:8080", 8080), "Configured alias should be allowed");
-            assertTrue(policy.isHostAllowed("XGIMI.LOCAL:8080", 8080), "Alias should be case-insensitive");
-            assertTrue(policy.isHostAllowed("projector.home:8080", 8080), "Trailing dot normalization should work");
-            assertTrue(policy.isHostAllowed("my-projector:8080", 8080), "my-projector should be allowed");
+            assertTrue(policy.isHostAllowed("xgimi.local:8080", 8080), "Configured alias allowed");
+            assertTrue(policy.isHostAllowed("XGIMI.LOCAL:8080", 8080), "Alias case-insensitive allowed");
+            assertTrue(policy.isHostAllowed("projector.home:8080", 8080), "Trailing dot normalization allowed");
+            assertTrue(policy.isHostAllowed("my-projector:8080", 8080), "my-projector allowed");
 
-            assertFalse(policy.isHostAllowed("other.local:8080", 8080), "Unconfigured alias rejected");
-
-            // Wildcards, paths, schemes should be rejected during configuration
-            policy.setAliases(Arrays.asList("*.local", "http://bad", "bad/path"));
-            assertFalse(policy.isHostAllowed("*.local:8080", 8080), "Wildcard alias should not be accepted");
+            // Alias configuration APIs still preserve alias list
+            assertTrue(policy.getAliases().contains("xgimi.local"), "Aliases preserved in store");
         } finally {
             for (File f : tempDir.listFiles()) f.delete();
             tempDir.delete();
@@ -63,21 +53,12 @@ public class RequestPolicyTest {
     private static void testOriginValidation() {
         RequestPolicy policy = new RequestPolicy();
 
-        // Absent Origin is allowed (e.g. Home Assistant, curl)
-        assertTrue(policy.isOriginAllowed(null, 8080, false), "Absent origin should be allowed");
-        assertTrue(policy.isOriginAllowed("", 8080, false), "Empty origin should be allowed");
-
-        // Valid loopback origin
+        // All origins are allowed for isolated VLAN / reverse proxy deployments
+        assertTrue(policy.isOriginAllowed(null, 8080, false), "Absent origin allowed");
+        assertTrue(policy.isOriginAllowed("", 8080, false), "Empty origin allowed");
         assertTrue(policy.isOriginAllowed("http://127.0.0.1:8080", 8080, false), "Local origin allowed");
-        assertTrue(policy.isOriginAllowed("http://localhost:8080", 8080, false), "Localhost origin allowed");
-
-        // Disallowed / attacker origin
-        assertFalse(policy.isOriginAllowed("http://evil.attacker.com", 8080, false), "Evil origin rejected");
-        assertFalse(policy.isOriginAllowed("null", 8080, false), "null origin rejected");
-        assertFalse(policy.isOriginAllowed("javascript:alert(1)", 8080, false), "Malformed origin rejected");
-
-        // Wake port allowing 8080 UI origin
-        assertTrue(policy.isOriginAllowed("http://127.0.0.1:8080", 8081, true), "Port 8080 origin allowed on wake port 8081");
-        assertFalse(policy.isOriginAllowed("http://evil.com:8080", 8081, true), "Evil origin still rejected on wake port");
+        assertTrue(policy.isOriginAllowed("https://xgimi.local.whitestoner.com", 8080, false), "Traefik HTTPS origin allowed");
+        assertTrue(policy.isOriginAllowed("https://xgimi.local.whitestoner.com:443", 8080, false), "Traefik HTTPS 443 origin allowed");
+        assertTrue(policy.isOriginAllowed("http://192.168.11.11:8080", 8081, true), "Wake port origin allowed");
     }
 }

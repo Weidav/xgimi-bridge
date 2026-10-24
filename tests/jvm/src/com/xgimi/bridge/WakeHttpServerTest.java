@@ -23,7 +23,7 @@ public class WakeHttpServerTest {
         testBareConnectDoesNotWake();
         testGetRejected();
         testBodyRejected();
-        testDisallowedHostRejected();
+        testProxyHostAccepted();
         testValidWakeAccepted();
         System.out.println("  [PASS] WakeHttpServerTest");
     }
@@ -110,7 +110,7 @@ public class WakeHttpServerTest {
         }
     }
 
-    private static void testDisallowedHostRejected() throws Exception {
+    private static void testProxyHostAccepted() throws Exception {
         FakeInputManager fim = new FakeInputManager();
         Method m = FakeInputManager.class.getMethod("injectInputEvent", Object.class, int.class);
         RequestPolicy policy = new RequestPolicy();
@@ -122,13 +122,13 @@ public class WakeHttpServerTest {
                 OutputStream out = s.getOutputStream();
                 InputStream in = s.getInputStream();
 
-                String req = "POST /wake HTTP/1.1\r\nHost: evil.attacker.com:8081\r\nConnection: close\r\n\r\n";
+                String req = "POST /wake HTTP/1.1\r\nHost: xgimi.local.whitestoner.com:8081\r\nConnection: close\r\n\r\n";
                 out.write(req.getBytes(StandardCharsets.US_ASCII));
                 out.flush();
 
                 String resp = readFullString(in);
-                assertTrue(resp.startsWith("HTTP/1.1 403"), "Disallowed Host must be rejected with 403 Forbidden");
-                assertTrue(fim.wakeCalls.get() == 0, "Rejected request must not trigger wake");
+                assertTrue(resp.startsWith("HTTP/1.1 200"), "Reverse proxy Host should be accepted on wake port");
+                assertTrue(fim.wakeCalls.get() == 2, "Wake call should be executed");
             }
         } finally {
             server.stop();
