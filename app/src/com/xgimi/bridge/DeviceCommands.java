@@ -64,44 +64,7 @@ public class DeviceCommands {
                 return errorResult(404, "not_found", "Unknown knob: " + knob);
             }
 
-            boolean ok;
-            switch (canonical) {
-                case "wbRed":
-                    ok = aidl.setInt(AidlClient.TX_SET_WB_RED_GAIN, value);
-                    break;
-                case "wbGreen":
-                    ok = aidl.setInt(AidlClient.TX_SET_WB_GREEN_GAIN, value);
-                    break;
-                case "wbBlue":
-                    ok = aidl.setInt(AidlClient.TX_SET_WB_BLUE_GAIN, value);
-                    break;
-                case "colorTemp":
-                    ok = aidl.setInt(AidlClient.TX_SET_COLOR_TEMP, value);
-                    break;
-                case "pictureMode":
-                    ok = aidl.setInt(AidlClient.TX_SET_PICTURE_MODE, value);
-                    break;
-                case "gameMode":
-                    ok = aidl.setInt(AidlClient.TX_SET_GAME_MODE_OPTION, value);
-                    break;
-                case "brightness":
-                    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 0, value);
-                    break;
-                case "contrast":
-                    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 1, value);
-                    break;
-                case "saturation":
-                    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 2, value);
-                    break;
-                case "sharpness":
-                    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 3, value);
-                    break;
-                case "hue":
-                    ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 4, value);
-                    break;
-                default:
-                    return errorResult(404, "not_found", "Unknown knob: " + knob);
-            }
+            boolean ok = applyAidlSetting(aidl, canonical, value);
 
             if (!ok) {
                 return errorResult(502, "device_write_failed", "Hardware setter failed for " + knob);
@@ -128,11 +91,11 @@ public class DeviceCommands {
             return busyResult();
         }
         try {
-            boolean ok1 = aidl.setInt(AidlClient.TX_SET_WB_RED_GAIN, 50);
+            boolean ok1 = aidl.setWbRedGain(50);
             Thread.sleep(60);
-            boolean ok2 = aidl.setInt(AidlClient.TX_SET_WB_GREEN_GAIN, 50);
+            boolean ok2 = aidl.setWbGreenGain(50);
             Thread.sleep(60);
-            boolean ok3 = aidl.setInt(AidlClient.TX_SET_WB_BLUE_GAIN, 50);
+            boolean ok3 = aidl.setWbBlueGain(50);
             Thread.sleep(60);
             aidl.resetPictureMode(mode, force);
 
@@ -178,53 +141,10 @@ public class DeviceCommands {
             for (String field : order) {
                 if (!validatedValues.containsKey(field)) continue;
                 int target = validatedValues.get(field);
-                boolean ok = false;
-                switch (field) {
-                    case "pictureMode":
-                        ok = aidl.setInt(AidlClient.TX_SET_PICTURE_MODE, target);
-                        sleepQuietly(60);
-                        break;
-                    case "colorTemp":
-                        ok = aidl.setInt(AidlClient.TX_SET_COLOR_TEMP, target);
-                        sleepQuietly(60);
-                        break;
-                    case "wbRed":
-                        ok = aidl.setInt(AidlClient.TX_SET_WB_RED_GAIN, target);
-                        sleepQuietly(60);
-                        break;
-                    case "wbGreen":
-                        ok = aidl.setInt(AidlClient.TX_SET_WB_GREEN_GAIN, target);
-                        sleepQuietly(60);
-                        break;
-                    case "wbBlue":
-                        ok = aidl.setInt(AidlClient.TX_SET_WB_BLUE_GAIN, target);
-                        sleepQuietly(60);
-                        break;
-                    case "gameMode":
-                        ok = aidl.setInt(AidlClient.TX_SET_GAME_MODE_OPTION, target);
-                        sleepQuietly(60);
-                        break;
-                    case "brightness":
-                        ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 0, target);
-                        sleepQuietly(150);
-                        break;
-                    case "contrast":
-                        ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 1, target);
-                        sleepQuietly(150);
-                        break;
-                    case "saturation":
-                        ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 2, target);
-                        sleepQuietly(150);
-                        break;
-                    case "sharpness":
-                        ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 3, target);
-                        sleepQuietly(150);
-                        break;
-                    case "hue":
-                        ok = aidl.setIntInt(AidlClient.TX_SET_PICTURE_ITEM, 4, target);
-                        sleepQuietly(150);
-                        break;
-                }
+                boolean ok = applyAidlSetting(aidl, field, target);
+                sleepQuietly(field.equals("brightness") || field.equals("contrast") ||
+                             field.equals("saturation") || field.equals("sharpness") ||
+                             field.equals("hue") ? 150 : 60);
 
                 if (!ok) {
                     JSONObject err = new JSONObject();
@@ -343,5 +263,34 @@ public class DeviceCommands {
             obj.put("error", message != null ? message : "");
         } catch (JSONException ignored) {}
         return new CommandResult(status, obj);
+    }
+
+    public static boolean applyAidlSetting(AidlClient aidl, String field, int value) throws RemoteException {
+        switch (field) {
+            case "wbRed":
+                return aidl.setWbRedGain(value);
+            case "wbGreen":
+                return aidl.setWbGreenGain(value);
+            case "wbBlue":
+                return aidl.setWbBlueGain(value);
+            case "colorTemp":
+                return aidl.setColorTemp(value);
+            case "pictureMode":
+                return aidl.setPictureMode(value);
+            case "gameMode":
+                return aidl.setGameModeOption(value);
+            case "brightness":
+                return aidl.setPictureItem(0, value);
+            case "contrast":
+                return aidl.setPictureItem(1, value);
+            case "saturation":
+                return aidl.setPictureItem(2, value);
+            case "sharpness":
+                return aidl.setPictureItem(3, value);
+            case "hue":
+                return aidl.setPictureItem(4, value);
+            default:
+                return false;
+        }
     }
 }

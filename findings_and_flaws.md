@@ -153,6 +153,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.19** | `MiniHttp` `Response.Status` Machinery | Pruned unused HTTP status `GATEWAY_TIMEOUT` and dead helper methods `getRequestStatus()` and `getDescription()`. |
 | **3.20** | `App.jsx` `INFO_SECTIONS` Table Size | Extracted 220+ line telemetry metadata table into dedicated `web/src/constants/infoSections.js` module. |
 | **3.21** | `App.jsx` `formatInfoValue` Value Formatting | Cleanly format nested telemetry objects and object arrays with key-value pairs rather than raw JSON strings. |
+| **3.13** | `AidlClient` Exposes Raw Transaction Codes | Wrapped raw transaction codes in semantic domain methods (`setWbRedGain`, `setWhiteBalance`, `setPictureMode`, `setPictureItem`, etc.) and centralized caller dispatch in `DeviceCommands.applyAidlSetting`. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -223,9 +224,5 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: ~780-line class with inline `if/else` route dispatching, TV input reflection, and request parameter handling.
 - **Future Check**: Introduce a `Map<String, Handler>` route table and separate services (`InputService`, `PowerService`, `AdbService`).
 
-#### 3.13 `AidlClient` Exposes Raw Transaction Codes
-- **File**: [`app/src/com/xgimi/bridge/AidlClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/AidlClient.java)
-- **Issue**: Callers invoke transaction codes directly (`TX_SET_PICTURE_ITEM`, etc.) rather than semantic methods.
-- **Future Check**: Wrap in domain methods (`setWhiteBalance`, `setPictureSetting`).
 
 

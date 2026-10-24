@@ -256,6 +256,39 @@ public class AidlClient {
         }) != 0;
     }
 
+    // Semantic domain methods (hides raw transaction codes from callers)
+    public boolean setWbRedGain(int val) throws RemoteException {
+        return setInt(TX_SET_WB_RED_GAIN, val);
+    }
+
+    public boolean setWbGreenGain(int val) throws RemoteException {
+        return setInt(TX_SET_WB_GREEN_GAIN, val);
+    }
+
+    public boolean setWbBlueGain(int val) throws RemoteException {
+        return setInt(TX_SET_WB_BLUE_GAIN, val);
+    }
+
+    public boolean setWhiteBalance(int r, int g, int b) throws RemoteException {
+        return setWbRedGain(r) && setWbGreenGain(g) && setWbBlueGain(b);
+    }
+
+    public boolean setColorTemp(int val) throws RemoteException {
+        return setInt(TX_SET_COLOR_TEMP, val);
+    }
+
+    public boolean setPictureMode(int val) throws RemoteException {
+        return setInt(TX_SET_PICTURE_MODE, val);
+    }
+
+    public boolean setGameModeOption(int val) throws RemoteException {
+        return setInt(TX_SET_GAME_MODE_OPTION, val);
+    }
+
+    public boolean setPictureItem(int item, int val) throws RemoteException {
+        return setIntInt(TX_SET_PICTURE_ITEM, item, val);
+    }
+
     public void resetPictureMode(final int mode, final boolean force) throws RemoteException {
         BinderTransact.transactVoid(videoBinder.get(), DESC_VIDEO, TX_RESET_PICTURE_MODE, new BinderTransact.Writer() {
             @Override

@@ -67,6 +67,17 @@ public class AidlClient {
         return setterReturnValue;
     }
 
+    public boolean setWbRedGain(int val) throws android.os.RemoteException { return setInt(TX_SET_WB_RED_GAIN, val); }
+    public boolean setWbGreenGain(int val) throws android.os.RemoteException { return setInt(TX_SET_WB_GREEN_GAIN, val); }
+    public boolean setWbBlueGain(int val) throws android.os.RemoteException { return setInt(TX_SET_WB_BLUE_GAIN, val); }
+    public boolean setWhiteBalance(int r, int g, int b) throws android.os.RemoteException {
+        return setWbRedGain(r) && setWbGreenGain(g) && setWbBlueGain(b);
+    }
+    public boolean setColorTemp(int val) throws android.os.RemoteException { return setInt(TX_SET_COLOR_TEMP, val); }
+    public boolean setPictureMode(int val) throws android.os.RemoteException { return setInt(TX_SET_PICTURE_MODE, val); }
+    public boolean setGameModeOption(int val) throws android.os.RemoteException { return setInt(TX_SET_GAME_MODE_OPTION, val); }
+    public boolean setPictureItem(int item, int val) throws android.os.RemoteException { return setIntInt(TX_SET_PICTURE_ITEM, item, val); }
+
     public int getInt(int code) throws android.os.RemoteException {
         return getIntReturnValue != 0 ? getIntReturnValue : lastValue;
     }
