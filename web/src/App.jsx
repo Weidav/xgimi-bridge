@@ -483,10 +483,6 @@ export default function App() {
     }
   }
 
-  async function sendKey(keyCode) {
-    sendKeyDispatch(keyCode);
-  }
-
   async function sendText() {
     const text = await askPrompt({ title: "Send text", placeholder: "Type text to enter on TV…", okLabel: "Send" });
     if (!text) return;
@@ -514,7 +510,7 @@ export default function App() {
 
       {adbAuthorized ? (
         <RemoteCard
-          sendKey={sendKey}
+          sendKey={sendKeyDispatch}
           onSendText={sendText}
           onOpenPower={() => setPowerOpen(true)}
           onOpenSource={() => setSourceOpen(true)}

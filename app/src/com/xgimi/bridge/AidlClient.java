@@ -42,7 +42,6 @@ public class AidlClient {
     static final int TX_COMMON_GET_CURRENT_XGIMI_API_VERSION = 0x15;
     static final int TX_COMMON_SET_SYSTEM_PROPERTIES = 0x16;
     static final int TX_COMMON_GET_SYSTEM_PROPERTIES = 0x17;
-    static final int TX_COMMON_READ_SYS_FS = 0x1d;
     static final int TX_COMMON_IS_CEC_ENABLED = 0x23;
     static final int TX_COMMON_IS_CEC_AUTO_WAKEUP = 0x25;
     static final int TX_COMMON_IS_CEC_AUTO_DEVICE_OFF = 0x27;
@@ -79,7 +78,6 @@ public class AidlClient {
     static final int TX_GET_HDR_ENABLE = 0x23;
     static final int TX_SET_GAME_MODE_OPTION = 0x24;
     static final int TX_GET_GAME_MODE_OPTION = 0x25;
-    static final int TX_SET_GAME_MODE_OPTION_FOR_SOURCE = 0x26;
     static final int TX_GET_GAME_MODE_OPTION_FOR_SOURCE = 0x27;
 
     // IGimiAudio
@@ -201,17 +199,7 @@ public class AidlClient {
             public void write(Parcel p) {
                 p.writeString(key);
             }
-        });
-    }
 
-    public String readSysFsViaAidl(final String path) {
-        return BinderTransact.queryString(commonBinder.get(), DESC_COMMON, TX_COMMON_READ_SYS_FS, new BinderTransact.Writer() {
-            @Override
-            public void write(Parcel p) {
-                p.writeString(path);
-            }
-        });
-    }
 
     // ---------- video calls ----------
 

@@ -22,7 +22,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up the XGIMI binary sensors."""
     coordinator: XgimiDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([XgimiPowerBinarySensor(coordinator)])
+    async_add_entities(
+        [
+            XgimiPowerBinarySensor(coordinator),
+            XgimiConnectivityBinarySensor(coordinator),
+        ]
+    )
 
 
 class XgimiPowerBinarySensor(XgimiEntity, BinarySensorEntity):
@@ -39,3 +44,19 @@ class XgimiPowerBinarySensor(XgimiEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         """Return true if projector is awake."""
         return bool(self.coordinator.data.get("awake", False))
+
+
+class XgimiConnectivityBinarySensor(XgimiEntity, BinarySensorEntity):
+    """Binary sensor for bridge connectivity."""
+
+    _attr_name = "Connectivity"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+
+    def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
+        """Initialize connectivity binary sensor."""
+        super().__init__(coordinator, "connectivity_binary_sensor")
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if bridge is online."""
+        return bool(self.coordinator.data.get("online", False))

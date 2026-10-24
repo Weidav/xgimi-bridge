@@ -264,7 +264,7 @@ public class ProjectorInfoCollector {
 
             // Picture Mode & PQ sliders
             int picMode = aidlJson.optInt("pictureMode", -1);
-            String picModeLabel = resolvePictureMode(picMode, mtkPicMode, isInternalStorage);
+            String picModeLabel = resolvePictureMode(picMode, mtkPicMode);
             put(catBrightness, "pictureMode", picModeLabel);
 
             if (mtkSettings != null) {
@@ -991,7 +991,7 @@ public class ProjectorInfoCollector {
         return formatHdrType(gTvHdrType, isPlayingHdr, gTv);
     }
 
-    private static String resolvePictureMode(int aidlPicMode, String mtkPicMode, boolean isInternalStorage) {
+    private static String resolvePictureMode(int aidlPicMode, String mtkPicMode) {
         if (mtkPicMode != null && !mtkPicMode.trim().isEmpty()) {
             return formatMtkPictureMode(mtkPicMode);
         }

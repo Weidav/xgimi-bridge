@@ -119,6 +119,8 @@ The following items from the original audit were addressed and resolved followin
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **2.25** | `MiniHttp` Request/Response Redundant Getters | Removed redundant getters on `Request` and `Response` with already `public final` fields. |
 | **2.26** | `AidlClient` Standardized Transaction Pattern | Unified `AidlClient` read queries through null-safe query methods and mutation through throwing methods. |
+| **2.28** | Dead-Code Inventory | Pruned `readSysFsViaAidl`, `TX_SET_GAME_MODE_OPTION_FOR_SOURCE`, `sendKey(keyCode)` wrapper alias, and unused `isInternalStorage` parameter in `resolvePictureMode`. |
+| **3.24** | Coordinator Write-Only `online` Key | Exposed `XgimiConnectivityBinarySensor` in Home Assistant to expose live coordinator online state. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
 | **3.11** | Synchronous sleep in preset application on HTTP thread | Handled via `DeviceCommands` with pacing and non-blocking caller return. |
@@ -200,13 +202,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 
 
-#### 2.28 Dead-Code Inventory
-- `AidlClient.readSysFsViaAidl(String)`
-- `AidlClient.TX_SET_GAME_MODE_OPTION_FOR_SOURCE`
-- `App.jsx` `sendKey(keyCode)` (alias for `sendKeyDispatch`)
-- `ProjectorInfoCollector.resolvePictureMode(..., isInternalStorage)` (third argument unused)
-- `coordinator.py` `_last_data["online"]` (written 5x, read once internally)
-- **Future Check**: Prune verified dead code in a targeted hygiene pass.
 
 ---
 
@@ -292,10 +287,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: `JSON.stringify(val)` is rendered directly into table cells for nested objects/arrays in "Stats for nerds".
 - **Future Check**: Format nested objects with badges or key-value sub-tables.
 
-#### 3.24 `coordinator.py` Write-Only `online` Key
-- **File**: [`homeassistant/custom_components/xgimi_bridge/coordinator.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/coordinator.py)
-- **Issue**: `_last_data["online"]` is written in multiple places but no Home Assistant entity exposes it.
-- **Future Check**: Expose an `online` binary sensor or remove redundant writes.
 
 #### 3.25 `__init__.py` Sets an Ad-Hoc Attribute on the Coordinator
 - **File**: [`homeassistant/custom_components/xgimi_bridge/__init__.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/__init__.py)
