@@ -140,6 +140,8 @@ public class ProjectorFormatters {
             String mtkPicMode,
             boolean isInternalStorage) {
 
+        boolean isDvMtk = mtkPicMode != null && mtkPicMode.trim().toLowerCase(Locale.ROOT).startsWith("dolbyvision");
+
         // 1. Android TV Framework / MediaCodec state from Settings.Global "TvSourcesStatus"
         if (tvSourcesStatus != null && !tvSourcesStatus.trim().isEmpty()) {
             String upper = tvSourcesStatus.trim().toUpperCase();
@@ -149,7 +151,7 @@ public class ProjectorFormatters {
             if (upper.contains("HLG")) return "HLG (Hybrid Log-Gamma)";
             if (upper.contains("HDRVIVID")) return "HDR Vivid";
             if (upper.contains("SDR")) {
-                if (mtkPicMode == null || !mtkPicMode.startsWith("DolbyVision")) {
+                if (!isDvMtk) {
                     return "SDR (Standard Dynamic Range)";
                 }
             }
@@ -164,7 +166,7 @@ public class ProjectorFormatters {
         if (mtkHdrType == 3) return "Technicolor HDR";
 
         // 3. Active Picture Mode indicates Dolby Vision
-        if (mtkPicMode != null && mtkPicMode.startsWith("DolbyVision")) {
+        if (isDvMtk) {
             return "Dolby Vision";
         }
 
@@ -194,17 +196,17 @@ public class ProjectorFormatters {
         if ("DolbyVisionIQ".equalsIgnoreCase(mode)) return "Dolby Vision IQ";
         if ("DolbyVisionCustom".equalsIgnoreCase(mode)) return "Dolby Vision Custom";
         if ("DolbyVision".equalsIgnoreCase(mode)) return "Dolby Vision";
-        if ("FilmMaker".equalsIgnoreCase(mode)) return "Filmmaker Mode";
+        if ("FilmMaker".equalsIgnoreCase(mode) || "FMM".equalsIgnoreCase(mode)) return "Filmmaker Mode";
         if ("ImaxEnhanced".equalsIgnoreCase(mode)) return "IMAX Enhanced";
-        if ("Standard".equalsIgnoreCase(mode)) return "Standard";
+        if ("Standard".equalsIgnoreCase(mode) || "Natural".equalsIgnoreCase(mode)) return "Standard";
         if ("Movie".equalsIgnoreCase(mode)) return "Movie";
         if ("Sport".equalsIgnoreCase(mode) || "Sports".equalsIgnoreCase(mode)) return "Sports";
-        if ("Vivid".equalsIgnoreCase(mode)) return "Vivid";
+        if ("Vivid".equalsIgnoreCase(mode) || "Bright".equalsIgnoreCase(mode)) return "Vivid";
         if ("Game".equalsIgnoreCase(mode)) return "Game";
         if ("Monitor".equalsIgnoreCase(mode)) return "Monitor";
-        if ("Office".equalsIgnoreCase(mode)) return "Office";
-        if ("User".equalsIgnoreCase(mode)) return "ISF Day";
-        if ("Energy Saving".equalsIgnoreCase(mode) || "EnergySaving".equalsIgnoreCase(mode)) return "ISF Night";
+        if ("Office".equalsIgnoreCase(mode) || "PC".equalsIgnoreCase(mode)) return "Office";
+        if ("User".equalsIgnoreCase(mode) || "ISF Day".equalsIgnoreCase(mode) || "ISF_DAY".equalsIgnoreCase(mode) || "ISFDay".equalsIgnoreCase(mode)) return "ISF Day";
+        if ("Energy Saving".equalsIgnoreCase(mode) || "EnergySaving".equalsIgnoreCase(mode) || "ISF Night".equalsIgnoreCase(mode) || "ISF_NIGHT".equalsIgnoreCase(mode) || "ISFNight".equalsIgnoreCase(mode)) return "ISF Night";
         return mode;
     }
 

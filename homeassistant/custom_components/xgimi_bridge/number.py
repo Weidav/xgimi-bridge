@@ -53,7 +53,8 @@ class XgimiSlider(XgimiEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         """Return the current slider value."""
-        val = self.coordinator.data.get("picture", {}).get(self._key)
+        picture = self.coordinator.data.get("picture") if self.coordinator.data else None
+        val = picture.get(self._key) if isinstance(picture, dict) else None
         if isinstance(val, (int, float)):
             return float(val)
         return None

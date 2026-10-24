@@ -55,7 +55,10 @@ class XgimiInputSourceSelect(XgimiEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return currently selected input source."""
-        raw = self.coordinator.data.get("picture", {}).get("currentInputSource")
+        picture = self.coordinator.data.get("picture") if self.coordinator.data else None
+        if not isinstance(picture, dict):
+            return None
+        raw = picture.get("currentInputSource")
         return INPUT_SOURCES.get(raw)
 
     async def async_select_option(self, option: str) -> None:
@@ -128,7 +131,10 @@ class XgimiPictureModeSelect(XgimiEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return current picture mode."""
-        raw = self.coordinator.data.get("picture", {}).get("pictureMode")
+        picture = self.coordinator.data.get("picture") if self.coordinator.data else None
+        if not isinstance(picture, dict):
+            return None
+        raw = picture.get("pictureMode")
         return PICTURE_MODES.get(raw)
 
     async def async_select_option(self, option: str) -> None:
@@ -157,7 +163,10 @@ class XgimiColorTempSelect(XgimiEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return current color temperature."""
-        raw = self.coordinator.data.get("picture", {}).get("colorTemp")
+        picture = self.coordinator.data.get("picture") if self.coordinator.data else None
+        if not isinstance(picture, dict):
+            return None
+        raw = picture.get("colorTemp")
         return COLOR_TEMPS.get(raw)
 
     async def async_select_option(self, option: str) -> None:
@@ -186,7 +195,10 @@ class XgimiGameModeSelect(XgimiEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return current game mode."""
-        raw = self.coordinator.data.get("picture", {}).get("gameMode")
+        picture = self.coordinator.data.get("picture") if self.coordinator.data else None
+        if not isinstance(picture, dict):
+            return None
+        raw = picture.get("gameMode")
         return GAME_MODES.get(raw)
 
     async def async_select_option(self, option: str) -> None:

@@ -25,10 +25,10 @@ This document tracks findings, architectural flaws, bugs, duplicate code, and ba
   - Confirm screen visibly updates and no `device_write_failed` (HTTP 502) errors appear in bridge logs.
   - Adjust white balance gains (`wbRed`, `wbGreen`, `wbBlue`) and confirm color temperature changes.
 - [ ] **Mode & Input Switching**:
-  - Switch picture modes (`Standard`, `Movie`, `Game`, `Custom`) and color temperatures (`Standard`, `Warm`, `Cool`).
+  - Switch picture modes (`Standard`, `Movie`, `Vivid`, `Game`, `Sports`, `Office`, `Filmmaker Mode`, `ISF Day`, `ISF Night`) and color temperatures (`Standard`, `Warm`, `Cold`, `System`, `User`).
   - - [x] in SDR
   - - [ ] in HDR
-  - - [ ] inHGL
+  - - [ ] in HLG
   - - [ ] in DV
   - Switch input sources between internal storage/apps and HDMI ports. Confirm HDMI TvView pipeline switches cleanly without hanging.
 - [ ] **Validation Boundary Checks**:

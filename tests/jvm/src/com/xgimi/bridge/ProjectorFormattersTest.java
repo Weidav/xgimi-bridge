@@ -86,10 +86,20 @@ public class ProjectorFormattersTest {
 
         // 4. Fallback to MTK when aidlPicMode < 0
         assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(-1, "FilmMaker"), "mtk filmmaker fallback");
+        assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(-1, "FMM"), "mtk fmm fallback");
         assertEquals("IMAX Enhanced", ProjectorFormatters.resolvePictureMode(-1, "ImaxEnhanced"), "mtk imax fallback");
+        assertEquals("Standard", ProjectorFormatters.resolvePictureMode(-1, "Standard"), "mtk standard fallback");
+        assertEquals("Standard", ProjectorFormatters.resolvePictureMode(-1, "Natural"), "mtk natural fallback");
+        assertEquals("Vivid", ProjectorFormatters.resolvePictureMode(-1, "Vivid"), "mtk vivid fallback");
+        assertEquals("Vivid", ProjectorFormatters.resolvePictureMode(-1, "Bright"), "mtk bright fallback");
+        assertEquals("Office", ProjectorFormatters.resolvePictureMode(-1, "Office"), "mtk office fallback");
+        assertEquals("Office", ProjectorFormatters.resolvePictureMode(-1, "PC"), "mtk pc fallback");
         assertEquals("ISF Day", ProjectorFormatters.resolvePictureMode(-1, "User"), "mtk user mapped to isf day");
+        assertEquals("ISF Day", ProjectorFormatters.resolvePictureMode(-1, "ISF Day"), "mtk isf day fallback");
+        assertEquals("ISF Day", ProjectorFormatters.resolvePictureMode(-1, "ISF_DAY"), "mtk isf_day fallback");
         assertEquals("ISF Night", ProjectorFormatters.resolvePictureMode(-1, "Energy Saving"), "mtk energy saving mapped to isf night");
         assertEquals("ISF Night", ProjectorFormatters.resolvePictureMode(-1, "EnergySaving"), "mtk energysaving mapped to isf night");
+        assertEquals("ISF Night", ProjectorFormatters.resolvePictureMode(-1, "ISF_NIGHT"), "mtk isf_night fallback");
         assertEquals(null, ProjectorFormatters.resolvePictureMode(-1, null), "both null/negative");
         assertEquals(null, ProjectorFormatters.resolvePictureMode(-1, ""), "empty mtk mode fallback");
     }

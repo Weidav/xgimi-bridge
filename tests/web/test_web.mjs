@@ -1,8 +1,41 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS, formatAppName, sourceTitle, epToField, inputToAidlSource } from "../../web/src/api.js";
+import {
+  api,
+  extractWritableValues,
+  WRITABLE_PICTURE_FIELDS,
+  formatAppName,
+  sourceTitle,
+  epToField,
+  inputToAidlSource,
+  PICTURE_MODE_OPTIONS,
+} from "../../web/src/api.js";
 import { formatInfoValue } from "../../web/src/constants/infoSections.js";
+
+test("PICTURE_MODE_OPTIONS defines hardware-verified modes and labels", () => {
+  assert.equal(PICTURE_MODE_OPTIONS.length, 9);
+  const expected = [
+    { value: 8, label: "Standard" },
+    { value: 1, label: "Movie" },
+    { value: 0, label: "Vivid" },
+    { value: 4, label: "Game" },
+    { value: 9, label: "Sports" },
+    { value: 6, label: "Office" },
+    { value: 27, label: "Filmmaker Mode" },
+    { value: 30, label: "ISF Day" },
+    { value: 31, label: "ISF Night" },
+  ];
+  assert.deepEqual(PICTURE_MODE_OPTIONS, expected);
+
+  // Assert rejected/legacy modes are not in the list
+  const values = new Set(PICTURE_MODE_OPTIONS.map((o) => o.value));
+  assert.equal(values.has(2), false);
+  assert.equal(values.has(3), false);
+  assert.equal(values.has(5), false);
+  assert.equal(values.has(14), false);
+  assert.equal(values.has(18), false);
+});
 
 test("extractWritableValues filters out read-only and non-numeric fields", () => {
   const fullPicture = {

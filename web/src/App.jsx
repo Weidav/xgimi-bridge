@@ -1,5 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { api, extractWritableValues, epToField, KNOB_DEFINITIONS, inputToAidlSource } from "./api.js";
+import {
+  api,
+  extractWritableValues,
+  epToField,
+  KNOB_DEFINITIONS,
+  inputToAidlSource,
+  PICTURE_MODE_OPTIONS,
+  COLOR_TEMP_OPTIONS,
+  GAME_MODE_OPTIONS,
+} from "./api.js";
 import { useLiveRequests } from "./hooks/useLiveRequests.js";
 import { PinIcon, InfoIcon } from "./components/Icons.jsx";
 import { Slider, OptionRow } from "./components/Controls.jsx";
@@ -11,30 +20,6 @@ import { InfoSheet } from "./components/InfoSheet.jsx";
 
 const KNOBS = KNOB_DEFINITIONS.filter((k) => k.key.startsWith("wb"));
 const PICTURE_ITEMS = KNOB_DEFINITIONS.filter((k) => !k.key.startsWith("wb"));
-
-const PICTURE_MODE_OPTIONS = [
-  { value: 8, label: "Standard" },
-  { value: 1, label: "Movie" },
-  { value: 0, label: "Vivid" },
-  { value: 4, label: "Game" },
-  { value: 9, label: "Sports" },
-  { value: 6, label: "Office" },
-  { value: 27, label: "Filmmaker Mode" },
-  { value: 30, label: "ISF Day" },
-  { value: 31, label: "ISF Night" },
-];
-const COLOR_TEMP_OPTIONS = [
-  { value: 0, label: "System" },
-  { value: 1, label: "Warm" },
-  { value: 2, label: "Standard" },
-  { value: 3, label: "Cold" },
-  { value: 4, label: "User" },
-];
-const GAME_MODE_OPTIONS = [
-  { value: 0, label: "Off" },
-  { value: 1, label: "Standard" },
-  { value: 2, label: "Boost" },
-];
 
 function rgbDot(v) {
   const r = clamp(v?.wbRed), g = clamp(v?.wbGreen), b = clamp(v?.wbBlue);

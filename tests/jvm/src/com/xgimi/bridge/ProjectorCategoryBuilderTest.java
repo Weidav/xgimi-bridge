@@ -175,6 +175,8 @@ public class ProjectorCategoryBuilderTest {
                 new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk1);
         assertEquals("Standard (8)", res1.summary.optString("pictureMode"), "Summary pictureMode: aidl standard");
         assertEquals("Standard (8)", res1.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: aidl standard");
+        assertEquals(false, res1.categories.getJSONObject("display").optBoolean("imaxEnhancedPlaying"), "Stale MTK ImaxEnhanced must not set imaxEnhancedPlaying when AIDL mode 8 is active");
+        assertEquals(false, res1.categories.getJSONObject("display").optBoolean("filmmakerModePlaying"), "Standard mode 8 must not set filmmakerModePlaying");
 
         // Case 2: AIDL movie (1) with active MTK "DolbyVisionBright" -> MTK DV wins: "Dolby Vision Bright"
         JSONObject aidl2 = new JSONObject();
@@ -212,5 +214,36 @@ public class ProjectorCategoryBuilderTest {
                 new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk4);
         assertEquals("ISF Night", res4.summary.optString("pictureMode"), "Summary pictureMode: MTK Energy Saving to ISF Night");
         assertEquals("ISF Night", res4.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: MTK Energy Saving to ISF Night");
+
+        // Case 5: AIDL Filmmaker Mode (27) marks filmmakerModePlaying true even if MTK register has stale ImaxEnhanced
+        JSONObject aidl5 = new JSONObject();
+        aidl5.put("pictureMode", 27);
+        JSONObject mtk5 = new JSONObject();
+        JSONObject s5 = new JSONObject();
+        s5.put("Picture_Mode", "ImaxEnhanced");
+        mtk5.put("settings", s5);
+        ProjectorCategoryBuilder.CategorizedResult res5 = ProjectorCategoryBuilder.build(
+                ctx, aidl5, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk5);
+        assertEquals("Filmmaker Mode (27)", res5.summary.optString("pictureMode"), "Summary pictureMode: Filmmaker 27");
+        assertEquals(true, res5.categories.getJSONObject("display").optBoolean("filmmakerModePlaying"), "Filmmaker 27 marks filmmakerModePlaying true");
+        assertEquals(false, res5.categories.getJSONObject("display").optBoolean("imaxEnhancedPlaying"), "Stale MTK string does not mark imaxEnhancedPlaying");
+
+        // Case 6: AIDL missing (-1) with MTK hardware enum aliases ("PC" -> "Office", "Bright" -> "Vivid")
+        JSONObject aidl6 = new JSONObject();
+        JSONObject mtk6 = new JSONObject();
+        JSONObject s6 = new JSONObject();
+        s6.put("Picture_Mode", "PC");
+        mtk6.put("settings", s6);
+        ProjectorCategoryBuilder.CategorizedResult res6 = ProjectorCategoryBuilder.build(
+                ctx, aidl6, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk6);
+        assertEquals("Office", res6.summary.optString("pictureMode"), "MTK PC maps to Office");
+
+        s6.put("Picture_Mode", "Bright");
+        ProjectorCategoryBuilder.CategorizedResult res7 = ProjectorCategoryBuilder.build(
+                ctx, aidl6, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk6);
+        assertEquals("Vivid", res7.summary.optString("pictureMode"), "MTK Bright maps to Vivid");
     }
 }

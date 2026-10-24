@@ -52,6 +52,7 @@ public class ProjectorCategoryBuilder {
         String tvSourcesStatus = settingsJson.optString("global.TvSourcesStatus", null);
         boolean isPlaybackRunning = "1".equals(sysPropsJson.optString("vendor.mtk.playback.running", "0"));
         String runningApp = DeviceState.getRunningApp(ctx);
+        int picMode = aidlJson.optInt("pictureMode", -1);
 
         // --- Category 1: Signal & Display ---
         JSONObject catDisplay = new JSONObject();
@@ -135,8 +136,11 @@ public class ProjectorCategoryBuilder {
         }
         put(catDisplay, "dolbyVisionPicMode", dvPicModeLabel);
 
-        boolean isFfmPlaying = "FilmMaker".equalsIgnoreCase(mtkPicMode) || (gTv != null && gTv.optBoolean("isFFMPlaying", false));
-        boolean isImaxPlaying = "ImaxEnhanced".equalsIgnoreCase(mtkPicMode) || (gTv != null && gTv.optBoolean("isImaxVideoPlaying", false));
+        boolean isFfmPlaying = (picMode == 27)
+                || (gTv != null && gTv.optBoolean("isFFMPlaying", false))
+                || (picMode < 0 && ("FilmMaker".equalsIgnoreCase(mtkPicMode) || "FMM".equalsIgnoreCase(mtkPicMode)));
+        boolean isImaxPlaying = (gTv != null && gTv.optBoolean("isImaxVideoPlaying", false))
+                || (picMode < 0 && "ImaxEnhanced".equalsIgnoreCase(mtkPicMode));
         boolean isHdrVividPlaying = (tvSourcesStatus != null && tvSourcesStatus.toUpperCase().contains("HDRVIVID"))
                 || (gTv != null && gTv.optBoolean("isHdrVividPlaying", false));
         put(catDisplay, "filmmakerModePlaying", isFfmPlaying);
@@ -226,7 +230,6 @@ public class ProjectorCategoryBuilder {
         put(catBrightness, "pqPerformanceActive", "1".equals(sysPropsJson.optString("sys.xgimi.pqmode.isperf", "0")));
 
         // Picture Mode & PQ sliders
-        int picMode = aidlJson.optInt("pictureMode", -1);
         String picModeLabel = ProjectorFormatters.resolvePictureMode(picMode, mtkPicMode);
         put(catBrightness, "pictureMode", picModeLabel);
 

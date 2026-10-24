@@ -520,6 +520,13 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
         coordinator.data["picture"]["pictureMode"] = 999
         self.assertIsNone(pic_sel.current_option)
 
+        # Null-safe handling when picture is None or empty
+        coordinator.data["picture"] = None
+        self.assertIsNone(pic_sel.current_option)
+        coordinator.data = {}
+        self.assertIsNone(pic_sel.current_option)
+        coordinator.data = {"picture": {}}
+
         # Successful selection dispatches correct integer value
         coordinator.async_post_json = AsyncMock(return_value=True)
         for label, val in [("Standard", 8), ("Vivid", 0), ("Filmmaker Mode", 27), ("ISF Day", 30), ("ISF Night", 31)]:

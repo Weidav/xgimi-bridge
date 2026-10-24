@@ -18,6 +18,32 @@ EP_TO_FIELD_MAP["color-temp"] = "colorTemp";
 EP_TO_FIELD_MAP["picture-mode"] = "pictureMode";
 EP_TO_FIELD_MAP["game-mode"] = "gameMode";
 
+export const PICTURE_MODE_OPTIONS = [
+  { value: 8, label: "Standard" },
+  { value: 1, label: "Movie" },
+  { value: 0, label: "Vivid" },
+  { value: 4, label: "Game" },
+  { value: 9, label: "Sports" },
+  { value: 6, label: "Office" },
+  { value: 27, label: "Filmmaker Mode" },
+  { value: 30, label: "ISF Day" },
+  { value: 31, label: "ISF Night" },
+];
+
+export const COLOR_TEMP_OPTIONS = [
+  { value: 0, label: "System" },
+  { value: 1, label: "Warm" },
+  { value: 2, label: "Standard" },
+  { value: 3, label: "Cold" },
+  { value: 4, label: "User" },
+];
+
+export const GAME_MODE_OPTIONS = [
+  { value: 0, label: "Off" },
+  { value: 1, label: "Standard" },
+  { value: 2, label: "Boost" },
+];
+
 export const WRITABLE_PICTURE_FIELDS = [
   ...KNOB_DEFINITIONS.map((k) => k.key),
   "colorTemp", "pictureMode", "gameMode"
