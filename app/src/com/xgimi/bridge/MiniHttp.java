@@ -158,22 +158,6 @@ public abstract class MiniHttp {
         public void addHeader(String name, String value) {
             headers.put(name, value);
         }
-
-        public Status getStatus() {
-            return status;
-        }
-
-        public String getContentType() {
-            return contentType;
-        }
-
-        public byte[] getBody() {
-            return body;
-        }
-
-        public Map<String, String> getHeaders() {
-            return headers;
-        }
     }
 
     public static final class Request {
@@ -194,34 +178,6 @@ public abstract class MiniHttp {
             this.headers = headers != null ? headers : Collections.<String, String>emptyMap();
             this.body = body != null ? body : new byte[0];
             this.remoteAddress = remoteAddress;
-        }
-
-        public Method getMethod() {
-            return method;
-        }
-
-        public String getUri() {
-            return uri;
-        }
-
-        public String getQuery() {
-            return query;
-        }
-
-        public Map<String, String> getParms() {
-            return parms;
-        }
-
-        public Map<String, String> getHeaders() {
-            return headers;
-        }
-
-        public byte[] getBody() {
-            return body;
-        }
-
-        public InetAddress getRemoteAddress() {
-            return remoteAddress;
         }
     }
 
