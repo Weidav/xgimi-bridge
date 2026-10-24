@@ -1,6 +1,6 @@
 # XGIMI Horizon 20 Series Remote
 
-<p align="left"><img src="app/assets/web/icon-512.png" alt="XGIMI Remote" width="300"></p>
+<p align="left"><img src="web/public/icon-512.png" alt="XGIMI Remote" width="300"></p>
 
 Background-only Android service for an **XGIMI Horizon 20** (Base, Pro & Max) projector that exposes a local-LAN HTTP API and a small web app. Together they replace the physical remote: every button on the original Xgimi remote is reachable from your phone's browser, plus picture-quality controls and named presets.
 
