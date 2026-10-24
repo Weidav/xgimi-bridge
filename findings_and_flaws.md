@@ -156,6 +156,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.13** | `AidlClient` Exposes Raw Transaction Codes | Wrapped raw transaction codes in semantic domain methods (`setWbRedGain`, `setWhiteBalance`, `setPictureMode`, `setPictureItem`, etc.) and centralized caller dispatch in `DeviceCommands.applyAidlSetting`. |
 | **3.1** | Single-Use Micro-Functions in `ProjectorInfoCollector` | Replaced 20+ enum formatter switch functions with static lookup tables (`Map` / array) and generic `formatEnum` / `formatEnumMap` helpers. |
 | **3.6** | The Live-Request Governance Layer is Over-Engineered | Extracted ~110 lines of shared abort, single-flight semaphore, and circuit breaker logic into `useLiveRequests` custom hook and testable `createLiveRequestManager` state machine with unit test coverage. |
+| **3.5** | `App.jsx` Monolith | Split ~1,800-line monolithic file into modular components under `web/src/components/` (`Icons.jsx`, `Controls.jsx`, `Dialog.jsx`, `SourceSheet.jsx`, `PowerSheet.jsx`, `Remote.jsx`, `InfoSheet.jsx`), reducing `App.jsx` to under 500 lines. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -205,11 +206,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java)
 - **Issue**: Implements chunked decoding, query parsing, absolute-URI handling, fragment stripping, HTTP/1.0 keep-alive negotiation, and thread-local date formatters for a simple LAN API.
 - **Future Check**: Consider using Android built-in `com.sun.net.httpserver.HttpServer` or pruning unused protocol variants.
-
-#### 3.5 `App.jsx` Monolith
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: ~1,800 lines combining remote control layout, modal sheets, SVG icons, and presentation logic in one file.
-- **Future Check**: Split into component files under `web/src/components/` (`Remote.jsx`, `InfoSheet.jsx`, `SourceSheet.jsx`, `Icons.jsx`).
 
 #### 3.12 `HttpServer` is a Router with Inline Business Logic
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java)
