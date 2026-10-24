@@ -86,7 +86,7 @@ public class ProjectorInfoCollector {
         String mtkPicMode = mtkSettings != null ? mtkSettings.optString("Picture_Mode", null) : null;
         String tvSourcesStatus = settingsJson.optString("global.TvSourcesStatus", null);
         boolean isPlaybackRunning = "1".equals(sysPropsJson.optString("vendor.mtk.playback.running", "0"));
-        String runningApp = nonEmpty(sysPropsJson.optString("sys.mtk.running.application", null), settingsJson.optString("global.running_package_name", null));
+        String runningApp = DeviceState.getRunningApp(ctx);
 
         // Build categorized submenus + summary
         try {
@@ -931,10 +931,7 @@ public class ProjectorInfoCollector {
             put(o, "storageUsedGb", Math.round(usedGb * 10.0) / 10.0);
             put(o, "storageFormatted", fmtDouble(usedGb) + " GB / " + fmtDouble(totalGb) + " GB (" + sPct + "%)");
 
-            PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
-            if (pm != null) {
-                put(o, "interactiveAwake", pm.isInteractive());
-            }
+            put(o, "interactiveAwake", DeviceState.isAwake(ctx));
         } catch (Throwable ignore) {}
         return o;
     }

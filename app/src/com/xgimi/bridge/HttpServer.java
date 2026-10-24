@@ -563,26 +563,11 @@ public class HttpServer extends MiniHttp {
     }
 
     private boolean isAwake() {
-        android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
-        return pm == null || pm.isInteractive();
+        return DeviceState.isAwake(ctx);
     }
 
     static String getRunningApp(Context ctx) {
-        try {
-            Class<?> sp = Class.forName("android.os.SystemProperties");
-            java.lang.reflect.Method get = sp.getMethod("get", String.class, String.class);
-            String prop = (String) get.invoke(null, "sys.mtk.running.application", "");
-            if (prop != null && !prop.trim().isEmpty() && !"null".equalsIgnoreCase(prop.trim())) {
-                return prop.trim();
-            }
-        } catch (Throwable ignored) {}
-        try {
-            String pkg = Settings.Global.getString(ctx.getContentResolver(), "running_package_name");
-            if (pkg != null && !pkg.trim().isEmpty() && !"null".equalsIgnoreCase(pkg.trim())) {
-                return pkg.trim();
-            }
-        } catch (Throwable ignored) {}
-        return null;
+        return DeviceState.getRunningApp(ctx);
     }
 
     private Response serveAsset(Request req, String uri) {

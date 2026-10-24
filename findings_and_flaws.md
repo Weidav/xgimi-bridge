@@ -105,6 +105,8 @@ The following items from the original audit were addressed and resolved followin
 | **2.1** | Duplication of Raw MediaTek IPq Binder IPC | Extracted identical AIDL transactions (54 & 59) against `vendor.mediatek.hardware.pq.IPq/default` into a shared `MtkPqClient` helper. |
 | **2.2** | Duplicate Stream and File I/O Helpers | Consolidated redundant 8KB read/write buffer loops and file copy logic into a shared `IoUtils` utility used across `PresetStore` and `LocalAdbClient`. |
 | **2.3** | Duplicate JSON String Escaping & Error Formatting | Replaced duplicated custom string escaping loops with `JSONObject.quote()` across `MiniHttp` and `HttpServer`. |
+| **2.4** | Duplicate Running Application Lookups | Consolidated `sys.mtk.running.application` and `running_package_name` lookups into a unified `DeviceState.getRunningApp(Context)`. |
+| **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -147,11 +149,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 ### Section 2: Code Duplication & Shared Code Opportunities
 
-#### 2.4 Duplicate Running Application Lookups
-- **Files**: `HttpServer.java` and `ProjectorInfoCollector.java`.
-- **Issue**: Both independently perform reflection calls on `sys.mtk.running.application` and fallback to `running_package_name`.
-- **Future Check**: Consolidate into a unified `DeviceState.getRunningApp()` helper.
-
 #### 2.5 CSS Split Rules, Dead Selectors, and Inconsistent Tokens
 - **File**: [`web/src/index.css`](file:///workspaces/xgimi-bridge/web/src/index.css)
 - **Issue**: `.state` is an unused class; `--bg` is an unused CSS variable; `.btn` has conflicting background declarations; only one breakpoint (`min-width: 560px`).
@@ -184,11 +181,6 @@ The following items were identified during the codebase audit and remain unaddre
   - `app/src/com/xgimi/bridge/ProjectorInfoCollector.java`
 - **Issue**: Adding one knob requires editing multiple files across three languages. Java server-side mapping was unified in `SettingRules`, but Web and HA still maintain separate lists.
 - **Future Check**: Expose supported knobs and definitions dynamically from a bridge endpoint (e.g. `GET /api/knobs`) or shared schema.
-
-#### 2.12 Awake / Interactive Logic Duplication
-- **Files**: `HttpServer.java` and `ProjectorInfoCollector.java`.
-- **Issue**: Both independently call `PowerManager.isInteractive()` and check system properties.
-- **Future Check**: Share a single `DeviceState.isAwake(Context)` method.
 
 #### 2.13 `Map` -> `JSONObject` Conversion Duplication
 - **Files**: `HttpServer.java`, `PresetStore.java`, `ProjectorInfoCollector.java`.
