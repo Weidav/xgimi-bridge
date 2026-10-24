@@ -147,6 +147,8 @@ The following items from the original audit were addressed and resolved followin
 | **3.40** | Package Name and Job ID Duplication | Dynamically parse package name from `AndroidManifest.xml` and Job ID from `BridgeJobService.java` in `install.sh`. |
 | **3.14** | `BridgeJobService` Periodic Re-arming | Check `BridgeService.isRunning` state before attempting to start the service to prevent redundant startup calls. |
 | **3.17** | `KeyDispatcher` Sensor Probing | Cached sensor (12 indices) and fan (4 indices) telemetry for 5 seconds under `TELEMETRY_CACHE_LOCK` to reduce IPC overhead. |
+| **3.18** | `MiniHttp` Thread Pool Sizing | Replaced unbounded SynchronousQueue bursts with a bounded LinkedBlockingQueue and `allowCoreThreadTimeOut(true)`. |
+| **3.19** | `MiniHttp` `Response.Status` Machinery | Pruned unused HTTP status `GATEWAY_TIMEOUT` and dead helper methods `getRequestStatus()` and `getDescription()`. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -231,16 +233,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`app/src/com/xgimi/bridge/AidlClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/AidlClient.java)
 - **Issue**: Callers invoke transaction codes directly (`TX_SET_PICTURE_ITEM`, etc.) rather than semantic methods.
 - **Future Check**: Wrap in domain methods (`setWhiteBalance`, `setPictureSetting`).
-
-#### 3.18 `MiniHttp` Thread Pool Sizing is Arbitrary
-- **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java)
-- **Issue**: `new ThreadPoolExecutor(2, limits.maxActiveConnections, 30s, new SynchronousQueue<>())` immediately spawns threads on concurrent bursts.
-- **Future Check**: Use a bounded pool with a small work queue instead of `SynchronousQueue`.
-
-#### 3.19 `MiniHttp` `Response.Status` Carries Unused HTTP Machinery
-- **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java)
-- **Issue**: `getRequestStatus()` and `getDescription()` are unused; enum contains statuses never returned by the application.
-- **Future Check**: Replace with minimal status representation.
 
 #### 3.20 `App.jsx` `INFO_SECTIONS` Table Size
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)

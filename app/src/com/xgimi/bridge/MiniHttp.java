@@ -29,10 +29,10 @@ import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -112,8 +112,7 @@ public abstract class MiniHttp {
             INTERNAL_ERROR(500, "Internal Server Error"),
             NOT_IMPLEMENTED(501, "Not Implemented"),
             BAD_GATEWAY(502, "Bad Gateway"),
-            SERVICE_UNAVAILABLE(503, "Service Unavailable"),
-            GATEWAY_TIMEOUT(504, "Gateway Timeout");
+            SERVICE_UNAVAILABLE(503, "Service Unavailable");
 
             public final int code;
             public final String description;
@@ -121,14 +120,6 @@ public abstract class MiniHttp {
             Status(int code, String description) {
                 this.code = code;
                 this.description = description;
-            }
-
-            public int getRequestStatus() {
-                return code;
-            }
-
-            public String getDescription() {
-                return code + " " + description;
             }
         }
 
@@ -219,9 +210,10 @@ public abstract class MiniHttp {
         serverSocket.bind(new InetSocketAddress(port));
         running = true;
 
+        int poolSize = Math.max(2, limits.maxActiveConnections);
         executor = new ThreadPoolExecutor(
-            2, limits.maxActiveConnections, 30L, TimeUnit.SECONDS,
-            new SynchronousQueue<Runnable>(),
+            poolSize, poolSize, 60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<Runnable>(poolSize),
             new ThreadFactory() {
                 private final AtomicInteger count = new AtomicInteger(1);
                 @Override
@@ -232,6 +224,7 @@ public abstract class MiniHttp {
                 }
             }
         );
+        executor.allowCoreThreadTimeOut(true);
 
         watchdogService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
