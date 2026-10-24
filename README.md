@@ -187,10 +187,11 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 
 ### Installation
 
-1. Copy the `xgimi_bridge` folder into your Home Assistant `custom_components/` directory:
+1. Copy the `xgimi_bridge` folder into your Home Assistant `custom_components/` directory. From your HA config dir:
    ```bash
-   # From your Home Assistant host (e.g. nasPi5 in the HA config directory):
-   curl -fsSL https://github.com/Weidav/xgimi-bridge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=2 xgimi-bridge-main/homeassistant/custom_components/xgimi_bridge
+    rm -rf custom_components/xgimi_bridge && \
+    curl -fsSL https://github.com/Weidav/xgimi-bridge/archive/refs/heads/main.tar.gz | \
+    tar -xz --strip-components=2 xgimi-bridge-main/homeassistant/custom_components/xgimi_bridge
    ```
 2. Restart Home Assistant.
 3. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
