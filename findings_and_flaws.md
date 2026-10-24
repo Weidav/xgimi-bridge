@@ -115,6 +115,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.16** | `LocalAdbClient` Retry Boilerplate | Parameterized retry loop across key/text injection and hardware query into `withDispatcherRetry(DispatcherAction)`. |
 | **2.17 / 3.16** | Formatter Called Twice / Recomputing Category Values | Reused precomputed audio/earc formatters and category values (`hdrStatus`, `luminancePowerMode`, `pictureMode`, `activeOutputDevice`, `digitalOutputPassThroughFormat`) in `summary` block in `ProjectorInfoCollector`. |
 | **2.18** | Home Assistant Button Class Duplication | Consolidated identical `async_press` execution and error handling into `XgimiActionButton` base class. |
+| **2.20** | HDMI Input Reflection Duplication | Extracted `TvInputInfo` HDMI reflection into dedicated `HdmiInputHelper` utility. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -184,10 +185,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 
 
-#### 2.20 HDMI Input Reflection Duplication
-- **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java)
-- **Issue**: `getHdmiDeviceInfo` reflection repeated in `handleApi` and `findHdmiPassthroughInputId`.
-- **Future Check**: Extract into a dedicated `HdmiInputHelper`.
 
 #### 2.22 `App.jsx` Input Source Mapping Duplication
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)

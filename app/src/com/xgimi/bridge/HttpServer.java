@@ -197,18 +197,11 @@ public class HttpServer extends MiniHttp {
                         o.put("label", label != null ? label.toString() : null);
                         CharSequence custom = info.loadCustomLabel(ctx);
                         o.put("customLabel", custom != null ? custom.toString() : null);
-                        try {
-                            java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
-                            Object hdi = m1.invoke(info);
-                            if (hdi != null) {
-                                java.lang.reflect.Method getDisplayName = hdi.getClass().getMethod("getDisplayName");
-                                Object dn = getDisplayName.invoke(hdi);
-                                if (dn != null) o.put("displayName", dn.toString());
-                                java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
-                                Object pid = getPortId.invoke(hdi);
-                                if (pid != null) o.put("hdmiPortId", ((Integer) pid).intValue());
-                            }
-                        } catch (Throwable ignored) {}
+                        HdmiInputHelper.HdmiInfo hdmi = HdmiInputHelper.extractHdmiInfo(info);
+                        if (hdmi != null) {
+                            if (hdmi.displayName != null) o.put("displayName", hdmi.displayName);
+                            if (hdmi.portId != null) o.put("hdmiPortId", hdmi.portId.intValue());
+                        }
                     } catch (JSONException ignored) {}
                     arr.put(o);
                 }
@@ -334,18 +327,11 @@ public class HttpServer extends MiniHttp {
         if (tim == null) return null;
         String fallback = null;
         for (android.media.tv.TvInputInfo info : tim.getTvInputList()) {
-            try {
-                java.lang.reflect.Method m1 = info.getClass().getMethod("getHdmiDeviceInfo");
-                Object hdi = m1.invoke(info);
-                if (hdi != null) {
-                    java.lang.reflect.Method getPortId = hdi.getClass().getMethod("getPortId");
-                    Object pid = getPortId.invoke(hdi);
-                    if (pid instanceof Integer && ((Integer) pid).intValue() == port) {
-                        if (info.getParentId() == null) return info.getId();
-                        if (fallback == null) fallback = info.getId();
-                    }
-                }
-            } catch (Throwable ignored) {}
+            Integer pid = HdmiInputHelper.getHdmiPortId(info);
+            if (pid != null && pid.intValue() == port) {
+                if (info.getParentId() == null) return info.getId();
+                if (fallback == null) fallback = info.getId();
+            }
         }
         return fallback;
     }
