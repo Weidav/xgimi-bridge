@@ -8,7 +8,21 @@
 set -e
 PROJ="$(cd "$(dirname "$0")" && pwd)"
 APK="${APK:-$PROJ/build/bridge.apk}"
-PKG=com.xgimi.bridge
+
+# Derive package name from AndroidManifest.xml and Job ID from BridgeJobService.java
+MANIFEST="$PROJ/AndroidManifest.xml"
+PKG_FROM_MANIFEST=""
+if [ -f "$MANIFEST" ]; then
+    PKG_FROM_MANIFEST=$(grep -o 'package="[^"]*"' "$MANIFEST" | head -n1 | cut -d'"' -f2)
+fi
+PKG="${PKG_FROM_MANIFEST:-com.xgimi.bridge}"
+
+JOB_SERVICE="$PROJ/src/com/xgimi/bridge/BridgeJobService.java"
+JOB_ID_FROM_SRC=""
+if [ -f "$JOB_SERVICE" ]; then
+    JOB_ID_FROM_SRC=$(grep -o 'JOB_ID = [0-9]*' "$JOB_SERVICE" | head -n1 | awk '{print $3}')
+fi
+JOB_ID="${JOB_ID_FROM_SRC:-7331}"
 
 # 1. Check required tools
 if ! command -v adb >/dev/null 2>&1; then
@@ -102,5 +116,5 @@ adb -s "$TARGET" shell "pkill -f '[K]eyDispatcher' || true"
 adb -s "$TARGET" shell "am force-stop $PKG"
 adb -s "$TARGET" shell "am start -n $PKG/.LauncherActivity"
 sleep 2
-adb -s "$TARGET" shell "cmd jobscheduler run $PKG 7331" >/dev/null 2>&1 || true
+adb -s "$TARGET" shell "cmd jobscheduler run $PKG $JOB_ID" >/dev/null 2>&1 || true
 echo "Installed + whitelisted + job scheduled (persists across reboot)."

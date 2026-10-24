@@ -142,6 +142,10 @@ The following items from the original audit were addressed and resolved followin
 | **3.32** | `async_post_json` Refreshes on Every Write | Optimistically updated `_last_data` cache immediately on successful POST requests before scheduling refresh. |
 | **3.35** | `manifest.json` Requirements | Explicitly declared `"requirements": []` to conform to Home Assistant custom integration packaging standards. |
 | **3.36** | `pyproject.toml` Python Requirement | Lowered `requires-python` from `>=3.14` to `>=3.13` to align with standard Home Assistant environments. |
+| **3.37** | `vite.config.js` Base Path | Standardized `web/index.html` module script reference to `./src/main.jsx` matching relative base path `./`. |
+| **3.39** | `web/package.json` Test Script | Added `test` npm script in `web/package.json` executing node web regression tests. |
+| **3.40** | Package Name and Job ID Duplication | Dynamically parse package name from `AndroidManifest.xml` and Job ID from `BridgeJobService.java` in `install.sh`. |
+| **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
 ---
@@ -256,22 +260,3 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: `JSON.stringify(val)` is rendered directly into table cells for nested objects/arrays in "Stats for nerds".
 - **Future Check**: Format nested objects with badges or key-value sub-tables.
 
-#### 3.37 `vite.config.js` Base Path
-- **File**: [`web/vite.config.js`](file:///workspaces/xgimi-bridge/web/vite.config.js)
-- **Issue**: Uses `base: "./"` while some assets reference root paths.
-- **Future Check**: Verify and standardize base path handling.
-
-#### 3.39 `web/package.json` Has No Lint/Test/Format Scripts
-- **File**: [`web/package.json`](file:///workspaces/xgimi-bridge/web/package.json)
-- **Issue**: Only `dev` and `build`. Lacks `lint`, `format`, or `test` scripts.
-- **Future Check**: Add ESLint/Prettier configuration and npm test scripts.
-
-#### 3.40 Script Duplication of Package Name and Job ID
-- **Files**: `app/build.sh`, `app/install.sh`, `app/AndroidManifest.xml`.
-- **Issue**: `com.xgimi.bridge` and job ID `7331` duplicated across shell scripts and Java code.
-- **Future Check**: Read package name dynamically from `AndroidManifest.xml`.
-
-#### 3.41 `README.md` Documents a Build One-Liner Twice
-- **File**: [`README.md`](file:///workspaces/xgimi-bridge/README.md)
-- **Issue**: `npm --prefix web run build && (cd app && ./build.sh && ./install.sh)` appears under both "One-liner build & deploy" and "Rebuild only the web app".
-- **Future Check**: Fix heading and document the targeted web-only build step.

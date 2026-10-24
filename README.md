@@ -103,6 +103,10 @@ npm --prefix web run build && (cd app && ./build.sh && PROJECTOR=192.168.3.17 ./
 # 1) Build the web app (writes the bundle into app/assets/web/)
 cd web && npm install && npm run build
 
+# Or rebuild only the web app after making changes in web/
+npm --prefix web run build
+```
+
 # 2) Build the APK
 cd ../app && ./build.sh        # output: build/bridge.apk
 
