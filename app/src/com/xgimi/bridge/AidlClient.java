@@ -167,191 +167,98 @@ public class AidlClient {
     };
 
     private IBinder getSubBinder(IBinder svc, int code) throws RemoteException {
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_SVC);
-            svc.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readStrongBinder();
-        } finally { data.recycle(); reply.recycle(); }
+        return BinderTransact.getSubBinder(svc, DESC_SVC, code);
     }
 
     /** Turn the projector lamp on/off via IGimiProjector.setLedOn(boolean) — Android keeps running. */
-    public void setLedOn(boolean on) throws RemoteException {
-        IBinder b = projectorBinder.get();
-        if (b == null) throw new RemoteException("projector binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_PROJECTOR);
-            data.writeInt(on ? 1 : 0);
-            b.transact(TX_PROJECTOR_SET_LED_ON, data, reply, 0);
-            reply.readException();
-        } finally { data.recycle(); reply.recycle(); }
+    public void setLedOn(final boolean on) throws RemoteException {
+        BinderTransact.transactVoid(projectorBinder.get(), DESC_PROJECTOR, TX_PROJECTOR_SET_LED_ON, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(on ? 1 : 0);
+            }
+        });
     }
 
     public Boolean isLedOn() {
-        return callBinderBool(projectorBinder.get(), DESC_PROJECTOR, TX_PROJECTOR_IS_LED_ON);
+        return BinderTransact.queryBool(projectorBinder.get(), DESC_PROJECTOR, TX_PROJECTOR_IS_LED_ON);
     }
 
     /** Set a system property via the system-uid xgimiservice — used for sys.powerctl etc. */
-    public void setSystemProperty(String key, String value) throws RemoteException {
-        IBinder b = commonBinder.get();
-        if (b == null) throw new RemoteException("common binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_COMMON);
-            data.writeString(key);
-            data.writeString(value);
-            b.transact(TX_COMMON_SET_SYSTEM_PROPERTIES, data, reply, 0);
-            reply.readException();
-        } finally { data.recycle(); reply.recycle(); }
+    public void setSystemProperty(final String key, final String value) throws RemoteException {
+        BinderTransact.transactVoid(commonBinder.get(), DESC_COMMON, TX_COMMON_SET_SYSTEM_PROPERTIES, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeString(key);
+                p.writeString(value);
+            }
+        });
     }
 
-    public String getSystemPropertyViaAidl(String key) {
-        return callBinderStringWithStringArg(commonBinder.get(), DESC_COMMON, TX_COMMON_GET_SYSTEM_PROPERTIES, key);
+    public String getSystemPropertyViaAidl(final String key) {
+        return BinderTransact.queryString(commonBinder.get(), DESC_COMMON, TX_COMMON_GET_SYSTEM_PROPERTIES, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeString(key);
+            }
+        });
     }
 
-    public String readSysFsViaAidl(String path) {
-        return callBinderStringWithStringArg(commonBinder.get(), DESC_COMMON, TX_COMMON_READ_SYS_FS, path);
-    }
-
-    private Integer callBinderInt(IBinder b, String desc, int code) {
-        if (b == null) return null;
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(desc);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt();
-        } catch (Throwable t) {
-            return null;
-        } finally { data.recycle(); reply.recycle(); }
-    }
-
-    private Integer callBinderIntWithIntArg(IBinder b, String desc, int code, int arg) {
-        if (b == null) return null;
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(desc);
-            data.writeInt(arg);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt();
-        } catch (Throwable t) {
-            return null;
-        } finally { data.recycle(); reply.recycle(); }
-    }
-
-    private Boolean callBinderBool(IBinder b, String desc, int code) {
-        Integer v = callBinderInt(b, desc, code);
-        return v == null ? null : (v != 0);
-    }
-
-    private String callBinderString(IBinder b, String desc, int code) {
-        if (b == null) return null;
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(desc);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readString();
-        } catch (Throwable t) {
-            return null;
-        } finally { data.recycle(); reply.recycle(); }
-    }
-
-    private String callBinderStringWithStringArg(IBinder b, String desc, int code, String arg) {
-        if (b == null) return null;
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(desc);
-            data.writeString(arg);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readString();
-        } catch (Throwable t) {
-            return null;
-        } finally { data.recycle(); reply.recycle(); }
+    public String readSysFsViaAidl(final String path) {
+        return BinderTransact.queryString(commonBinder.get(), DESC_COMMON, TX_COMMON_READ_SYS_FS, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeString(path);
+            }
+        });
     }
 
     // ---------- video calls ----------
 
     public int getInt(int code) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt();
-        } finally { data.recycle(); reply.recycle(); }
+        return BinderTransact.transactInt(videoBinder.get(), DESC_VIDEO, code, null);
     }
-
 
     public String getString(int code) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readString();
-        } finally { data.recycle(); reply.recycle(); }
+        return BinderTransact.transactString(videoBinder.get(), DESC_VIDEO, code, null);
     }
 
-    public int getIntWithIntArg(int code, int arg) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            data.writeInt(arg);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt();
-        } finally { data.recycle(); reply.recycle(); }
+    public int getIntWithIntArg(int code, final int arg) throws RemoteException {
+        return BinderTransact.transactInt(videoBinder.get(), DESC_VIDEO, code, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(arg);
+            }
+        });
     }
 
-    public boolean setInt(int code, int value) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            data.writeInt(value);
-            b.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt() != 0;
-        } finally { data.recycle(); reply.recycle(); }
+    public boolean setInt(int code, final int value) throws RemoteException {
+        return BinderTransact.transactInt(videoBinder.get(), DESC_VIDEO, code, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(value);
+            }
+        }) != 0;
     }
 
-    public boolean setIntInt(int code, int a, int b) throws RemoteException {
-        IBinder vb = videoBinder.get();
-        if (vb == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            data.writeInt(a);
-            data.writeInt(b);
-            vb.transact(code, data, reply, 0);
-            reply.readException();
-            return reply.readInt() != 0;
-        } finally { data.recycle(); reply.recycle(); }
+    public boolean setIntInt(int code, final int a, final int b) throws RemoteException {
+        return BinderTransact.transactInt(videoBinder.get(), DESC_VIDEO, code, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(a);
+                p.writeInt(b);
+            }
+        }) != 0;
     }
 
-    public void resetPictureMode(int mode, boolean force) throws RemoteException {
-        IBinder b = videoBinder.get();
-        if (b == null) throw new RemoteException("video binder not ready");
-        Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(DESC_VIDEO);
-            data.writeInt(mode);
-            data.writeInt(force ? 1 : 0);
-            b.transact(TX_RESET_PICTURE_MODE, data, reply, 0);
-            reply.readException();
-        } finally { data.recycle(); reply.recycle(); }
+    public void resetPictureMode(final int mode, final boolean force) throws RemoteException {
+        BinderTransact.transactVoid(videoBinder.get(), DESC_VIDEO, TX_RESET_PICTURE_MODE, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(mode);
+                p.writeInt(force ? 1 : 0);
+            }
+        });
     }
 
 
@@ -406,38 +313,42 @@ public class AidlClient {
         IBinder cb = commonBinder.get();
 
         // IGimiVideo extras
-        m.put("videoArcType", callBinderInt(vb, DESC_VIDEO, TX_GET_VIDEO_ARC_TYPE));
-        m.put("noiseReduction", callBinderInt(vb, DESC_VIDEO, TX_GET_NOISE_REDUCTION));
-        m.put("mfcLevel", callBinderInt(vb, DESC_VIDEO, TX_GET_MFC_LEVEL));
-        m.put("edidVersion", callBinderInt(vb, DESC_VIDEO, TX_GET_EDID_VERSION));
-        m.put("aspectRatio", callBinderInt(vb, DESC_VIDEO, TX_GET_ASPECT_RATIO));
-        m.put("current3dType", callBinderInt(vb, DESC_VIDEO, TX_GET_CURRENT_3D_TYPE));
-        m.put("displayFormat3d", callBinderInt(vb, DESC_VIDEO, TX_GET_3D_DISPLAY_FORMAT));
-        m.put("mode3dTo2d", callBinderInt(vb, DESC_VIDEO, TX_GET_3D_TO_2D_MODE));
-        m.put("is3dTo2d", callBinderBool(vb, DESC_VIDEO, TX_IS_3D_TO_2D));
-        m.put("isVideoPlaying", callBinderBool(vb, DESC_VIDEO, TX_IS_VIDEO_PLAYING));
-        m.put("hdrEnable", callBinderBool(vb, DESC_VIDEO, TX_GET_HDR_ENABLE));
+        m.put("videoArcType", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_VIDEO_ARC_TYPE));
+        m.put("noiseReduction", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_NOISE_REDUCTION));
+        m.put("mfcLevel", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_MFC_LEVEL));
+        m.put("edidVersion", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_EDID_VERSION));
+        m.put("aspectRatio", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_ASPECT_RATIO));
+        m.put("current3dType", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_CURRENT_3D_TYPE));
+        m.put("displayFormat3d", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_3D_DISPLAY_FORMAT));
+        m.put("mode3dTo2d", BinderTransact.queryInt(vb, DESC_VIDEO, TX_GET_3D_TO_2D_MODE));
+        m.put("is3dTo2d", BinderTransact.queryBool(vb, DESC_VIDEO, TX_IS_3D_TO_2D));
+        m.put("isVideoPlaying", BinderTransact.queryBool(vb, DESC_VIDEO, TX_IS_VIDEO_PLAYING));
+        m.put("hdrEnable", BinderTransact.queryBool(vb, DESC_VIDEO, TX_GET_HDR_ENABLE));
 
         // IGimiAudio extras
-        m.put("audioDataFormat", callBinderInt(ab, DESC_AUDIO, TX_AUDIO_GET_DATA_FORMAT));
-        m.put("soundMode", callBinderInt(ab, DESC_AUDIO, TX_AUDIO_GET_SOUND_MODE));
-        m.put("audioOutputDevices", callBinderInt(ab, DESC_AUDIO, TX_AUDIO_GET_OUTPUT_DEVICES));
-        m.put("audioOutDelay0", callBinderIntWithIntArg(ab, DESC_AUDIO, TX_AUDIO_GET_OUT_DEVICE_DELAY, 0));
-        m.put("audioVolume0", callBinderIntWithIntArg(ab, DESC_AUDIO, TX_AUDIO_GET_VOLUME, 0));
+        m.put("audioDataFormat", BinderTransact.queryInt(ab, DESC_AUDIO, TX_AUDIO_GET_DATA_FORMAT));
+        m.put("soundMode", BinderTransact.queryInt(ab, DESC_AUDIO, TX_AUDIO_GET_SOUND_MODE));
+        m.put("audioOutputDevices", BinderTransact.queryInt(ab, DESC_AUDIO, TX_AUDIO_GET_OUTPUT_DEVICES));
+        m.put("audioOutDelay0", BinderTransact.queryInt(ab, DESC_AUDIO, TX_AUDIO_GET_OUT_DEVICE_DELAY, new BinderTransact.Writer() {
+            @Override public void write(Parcel p) { p.writeInt(0); }
+        }));
+        m.put("audioVolume0", BinderTransact.queryInt(ab, DESC_AUDIO, TX_AUDIO_GET_VOLUME, new BinderTransact.Writer() {
+            @Override public void write(Parcel p) { p.writeInt(0); }
+        }));
 
         // IGimiProjector extras
         m.put("ledOn", isLedOn());
 
         // IGimiCommon extras
-        m.put("currentChip", callBinderString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_CHIP));
-        m.put("strState", callBinderInt(cb, DESC_COMMON, TX_COMMON_GET_STR));
-        m.put("currentProduct", callBinderString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_PRODUCT));
-        m.put("currentGmuiVersion", callBinderString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_GMUI_VERSION));
-        m.put("currentProductVersion", callBinderString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_PRODUCT_VERSION));
-        m.put("xgimiApiVersion", callBinderInt(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_XGIMI_API_VERSION));
-        m.put("cecEnabled", callBinderBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_ENABLED));
-        m.put("cecAutoWakeup", callBinderBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_AUTO_WAKEUP));
-        m.put("cecAutoDeviceOff", callBinderBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_AUTO_DEVICE_OFF));
+        m.put("currentChip", BinderTransact.queryString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_CHIP));
+        m.put("strState", BinderTransact.queryInt(cb, DESC_COMMON, TX_COMMON_GET_STR));
+        m.put("currentProduct", BinderTransact.queryString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_PRODUCT));
+        m.put("currentGmuiVersion", BinderTransact.queryString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_GMUI_VERSION));
+        m.put("currentProductVersion", BinderTransact.queryString(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_PRODUCT_VERSION));
+        m.put("xgimiApiVersion", BinderTransact.queryInt(cb, DESC_COMMON, TX_COMMON_GET_CURRENT_XGIMI_API_VERSION));
+        m.put("cecEnabled", BinderTransact.queryBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_ENABLED));
+        m.put("cecAutoWakeup", BinderTransact.queryBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_AUTO_WAKEUP));
+        m.put("cecAutoDeviceOff", BinderTransact.queryBool(cb, DESC_COMMON, TX_COMMON_IS_CEC_AUTO_DEVICE_OFF));
         return m;
     }
 }

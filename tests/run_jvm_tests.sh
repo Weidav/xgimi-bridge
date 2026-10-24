@@ -21,6 +21,7 @@ javac -cp tests/jvm/lib/android-json-0.0.20131108.vaadin1.jar:tests/jvm/build \
   app/src/com/xgimi/bridge/IoUtils.java \
   app/src/com/xgimi/bridge/DeviceState.java \
   app/src/com/xgimi/bridge/JsonUtils.java \
+  app/src/com/xgimi/bridge/BinderTransact.java \
   $(find tests/jvm/src -name "*.java")
 
 java -Xmx64m -cp tests/jvm/lib/android-json-0.0.20131108.vaadin1.jar:tests/jvm/build com.xgimi.bridge.TestRunner

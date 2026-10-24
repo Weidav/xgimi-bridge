@@ -8,7 +8,9 @@ public class Parcel {
     public void writeInterfaceToken(String t) {}
     public void writeInt(int v) {}
     public int readInt() { return 0; }
+    public void writeString(String s) {}
     public void readException() {}
     public String readString() { return ""; }
+    public IBinder readStrongBinder() { return null; }
     public byte[] createByteArray() { return new byte[0]; }
 }

@@ -111,6 +111,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
 | **2.13** | `Map` -> `JSONObject` Conversion Duplication | Centralized recursive map and collection JSON serialization in `JsonUtils.mapToJson()`. |
 | **2.14** | `put` / `putSafe` Duplicated | Consolidated JSON object putters with type sanitization into `JsonUtils.putSafe()` across `KeyDispatcher` and `ProjectorInfoCollector`. |
+| **2.15** | Binder Reflection Helpers Duplication | Centralized Parcel obtain/transact/recycle boilerplate into `BinderTransact` utility and simplified `AidlClient`. |
 | **2.16** | `LocalAdbClient` Retry Boilerplate | Parameterized retry loop across key/text injection and hardware query into `withDispatcherRetry(DispatcherAction)`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
@@ -177,10 +178,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: Adding one knob requires editing multiple files across three languages. Java server-side mapping was unified in `SettingRules`, but Web and HA still maintain separate lists.
 - **Future Check**: Expose supported knobs and definitions dynamically from a bridge endpoint (e.g. `GET /api/knobs`) or shared schema.
 
-#### 2.15 Binder Reflection Helpers Duplication
-- **Files**: `AidlClient.java` and `KeyDispatcher.java`.
-- **Issue**: 10+ reflection wrappers (`callBinderInt`, `callIntArg`, `callIntIntArg`) repeating Parcel obtain/recycle boilerplate.
-- **Future Check**: Centralize into a clean `BinderTransact` utility.
 
 
 #### 2.17 / 3.16 Formatter Called Twice During Telemetry Collection / Recomputing Category Values

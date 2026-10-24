@@ -14,6 +14,7 @@ public class TestRunner {
         failures += run("HttpServerTest", HttpServerTest::runAll);
         failures += run("IoUtilsTest", IoUtilsTest::runAll);
         failures += run("JsonUtilsTest", JsonUtilsTest::runAll);
+        failures += run("BinderTransactTest", BinderTransactTest::runAll);
 
         if (failures == 0) {
             System.out.println("=== ALL JVM REGRESSION TESTS PASSED ===");
