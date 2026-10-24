@@ -42,9 +42,13 @@ public class BridgeJobService extends JobService {
 
     @Override
     public boolean onStartJob(JobParameters params) {
-        Log.i(TAG, "JobService onStartJob -- starting BridgeService");
-        Intent svc = new Intent(this, BridgeService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc); else startService(svc);
+        if (!BridgeService.isRunning) {
+            Log.i(TAG, "JobService onStartJob -- starting BridgeService");
+            Intent svc = new Intent(this, BridgeService.class);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc); else startService(svc);
+        } else {
+            Log.d(TAG, "JobService onStartJob -- BridgeService is already running");
+        }
         // Re-arm so the job survives the next reboot. 30-90s window is the loop breaker;
         // after a reboot, the persisted absolute deadline will already be past, so it fires ASAP.
         scheduleNextBoot(this);

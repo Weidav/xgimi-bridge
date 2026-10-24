@@ -19,6 +19,8 @@ public class BridgeService extends Service {
     private static final int NOTIF_ID = 1;
     private static final int HTTP_PORT = 8080;
 
+    public static volatile boolean isRunning = false;
+
     private HttpServer server;
     private AidlClient aidl;
     private PresetStore presets;
@@ -30,6 +32,7 @@ public class BridgeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        isRunning = true;
         Log.i(TAG, "service onCreate");
         startInForeground();
         acquireLocks();
@@ -92,6 +95,7 @@ public class BridgeService extends Service {
     @Override
     public void onDestroy() {
         Log.i(TAG, "service onDestroy");
+        isRunning = false;
         isDestroyed = true;
         if (startRetryThread != null) {
             startRetryThread.interrupt();

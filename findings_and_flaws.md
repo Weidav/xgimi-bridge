@@ -145,6 +145,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.37** | `vite.config.js` Base Path | Standardized `web/index.html` module script reference to `./src/main.jsx` matching relative base path `./`. |
 | **3.39** | `web/package.json` Test Script | Added `test` npm script in `web/package.json` executing node web regression tests. |
 | **3.40** | Package Name and Job ID Duplication | Dynamically parse package name from `AndroidManifest.xml` and Job ID from `BridgeJobService.java` in `install.sh`. |
+| **3.14** | `BridgeJobService` Periodic Re-arming | Check `BridgeService.isRunning` state before attempting to start the service to prevent redundant startup calls. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -229,11 +230,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`app/src/com/xgimi/bridge/AidlClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/AidlClient.java)
 - **Issue**: Callers invoke transaction codes directly (`TX_SET_PICTURE_ITEM`, etc.) rather than semantic methods.
 - **Future Check**: Wrap in domain methods (`setWhiteBalance`, `setPictureSetting`).
-
-#### 3.14 `BridgeJobService` Periodic Re-arming
-- **File**: [`app/src/com/xgimi/bridge/BridgeJobService.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/BridgeJobService.java)
-- **Issue**: Re-schedules the job every 30–90 seconds unconditionally.
-- **Future Check**: Use standard periodic job configuration or check if service is already running before re-starting.
 
 #### 3.17 `KeyDispatcher` Sensor Probing
 - **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java)
