@@ -119,42 +119,49 @@ public class LocalAdbClient {
         this.ctx = ctx;
     }
 
-    /** Inject a key via the persistent KeyDispatcher. ~5 ms per call once warm. */
-    public String injectKey(int keyCode) throws Exception {
+    private interface DispatcherAction {
+        String run() throws Exception;
+    }
+
+    private String withDispatcherRetry(DispatcherAction action) throws Exception {
         synchronized (dispatcherLock) {
             try {
-                return injectKeyOnce(keyCode);
+                return action.run();
             } catch (Exception first) {
                 Log.w(TAG, "Dispatcher fault (" + first.getMessage() + "), respawning");
                 closeDispatcher();
-                return injectKeyOnce(keyCode);
+                return action.run();
             }
         }
     }
 
-    public String injectText(String text) throws Exception {
-        synchronized (dispatcherLock) {
-            try {
-                return injectTextOnce(text);
-            } catch (Exception first) {
-                Log.w(TAG, "Dispatcher fault (" + first.getMessage() + "), respawning");
-                closeDispatcher();
+    /** Inject a key via the persistent KeyDispatcher. ~5 ms per call once warm. */
+    public String injectKey(final int keyCode) throws Exception {
+        return withDispatcherRetry(new DispatcherAction() {
+            @Override
+            public String run() throws Exception {
+                return injectKeyOnce(keyCode);
+            }
+        });
+    }
+
+    public String injectText(final String text) throws Exception {
+        return withDispatcherRetry(new DispatcherAction() {
+            @Override
+            public String run() throws Exception {
                 return injectTextOnce(text);
             }
-        }
+        });
     }
 
     /** Query hardware / GMPF / CEC info from the shell-uid KeyDispatcher (~10-30 ms). */
     public String queryHardwareInfo() throws Exception {
-        synchronized (dispatcherLock) {
-            try {
-                return queryHardwareInfoOnce();
-            } catch (Exception first) {
-                Log.w(TAG, "Dispatcher INFO fault (" + first.getMessage() + "), respawning");
-                closeDispatcher();
+        return withDispatcherRetry(new DispatcherAction() {
+            @Override
+            public String run() throws Exception {
                 return queryHardwareInfoOnce();
             }
-        }
+        });
     }
 
     /** Triggers the on-screen Allow prompt if needed; otherwise just verifies auth. */

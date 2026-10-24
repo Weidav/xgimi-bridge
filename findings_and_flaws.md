@@ -111,6 +111,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
 | **2.13** | `Map` -> `JSONObject` Conversion Duplication | Centralized recursive map and collection JSON serialization in `JsonUtils.mapToJson()`. |
 | **2.14** | `put` / `putSafe` Duplicated | Consolidated JSON object putters with type sanitization into `JsonUtils.putSafe()` across `KeyDispatcher` and `ProjectorInfoCollector`. |
+| **2.16** | `LocalAdbClient` Retry Boilerplate | Parameterized retry loop across key/text injection and hardware query into `withDispatcherRetry(DispatcherAction)`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -181,10 +182,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: 10+ reflection wrappers (`callBinderInt`, `callIntArg`, `callIntIntArg`) repeating Parcel obtain/recycle boilerplate.
 - **Future Check**: Centralize into a clean `BinderTransact` utility.
 
-#### 2.16 `LocalAdbClient` Retry Boilerplate
-- **File**: [`app/src/com/xgimi/bridge/LocalAdbClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/LocalAdbClient.java)
-- **Issue**: `injectKey`, `injectText`, `queryHardwareInfo` repeat identical retry loops.
-- **Future Check**: Parameterize into `withDispatcherRetry(Callable<T>)`.
 
 #### 2.17 / 3.16 Formatter Called Twice During Telemetry Collection / Recomputing Category Values
 - **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java)
