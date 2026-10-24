@@ -106,6 +106,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.2** | Duplicate Stream and File I/O Helpers | Consolidated redundant 8KB read/write buffer loops and file copy logic into a shared `IoUtils` utility used across `PresetStore` and `LocalAdbClient`. |
 | **2.3** | Duplicate JSON String Escaping & Error Formatting | Replaced duplicated custom string escaping loops with `JSONObject.quote()` across `MiniHttp` and `HttpServer`. |
 | **2.4** | Duplicate Running Application Lookups | Consolidated `sys.mtk.running.application` and `running_package_name` lookups into a unified `DeviceState.getRunningApp(Context)`. |
+| **2.5** | CSS Split Rules, Dead Selectors, and Inconsistent Tokens | Removed dead `.state` selector, bound `--bg` token to `html`/`body`, consolidated duplicate `.btn` declarations with hover transitions. |
 | **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
@@ -148,11 +149,6 @@ The following items were identified during the codebase audit and remain unaddre
 ---
 
 ### Section 2: Code Duplication & Shared Code Opportunities
-
-#### 2.5 CSS Split Rules, Dead Selectors, and Inconsistent Tokens
-- **File**: [`web/src/index.css`](file:///workspaces/xgimi-bridge/web/src/index.css)
-- **Issue**: `.state` is an unused class; `--bg` is an unused CSS variable; `.btn` has conflicting background declarations; only one breakpoint (`min-width: 560px`).
-- **Future Check**: Clean up dead selectors and organize CSS tokens consistently.
 
 #### 2.6 Dead Code in React Icons
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
