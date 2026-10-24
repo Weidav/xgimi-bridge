@@ -168,3 +168,74 @@ test("formatInfoValue formats booleans, arrays, and nested telemetry objects cle
   );
 });
 
+import { createLiveRequestManager } from "../../web/src/hooks/useLiveRequests.js";
+
+test("createLiveRequestManager governance: single-flight queue, offline abort, and circuit breaker", async () => {
+  let connected = true;
+  let pollFast = false;
+  const calls = [];
+  let shouldFail = false;
+
+  const mockApi = async (path, opts) => {
+    calls.push({ path, signal: opts?.signal });
+    if (shouldFail) {
+      throw new Error("Network timeout");
+    }
+    // Simulate brief network latency
+    await new Promise((r) => setTimeout(r, 10));
+    return { ok: true };
+  };
+
+  const mgr = createLiveRequestManager({
+    getConnected: () => connected,
+    apiFn: mockApi,
+    onPollFastChange: (fast) => {
+      pollFast = fast;
+    },
+  });
+
+  // 1. Single keypress
+  await mgr.sendKeyDispatch(19);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, "/api/adb/keyevent/19");
+  assert.equal(mgr.isCircuitOpen(), false);
+
+  // 2. Coalescing: fire multiple keys while first is in-flight
+  calls.length = 0;
+  const p1 = mgr.sendKeyDispatch(20);
+  const p2 = mgr.sendKeyDispatch(21);
+  const p3 = mgr.sendKeyDispatch(22);
+  await Promise.all([p1, p2, p3]);
+  // First key 20 fires, 21 was overwritten by 22 in pendingKey, so exactly 2 calls: 20 and 22
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].path, "/api/adb/keyevent/20");
+  assert.equal(calls[1].path, "/api/adb/keyevent/22");
+
+  // 3. Error trips circuit breaker
+  calls.length = 0;
+  shouldFail = true;
+  await mgr.sendKeyDispatch(23);
+  assert.equal(mgr.isCircuitOpen(), true);
+  assert.equal(pollFast, true);
+
+  // Subsequent key presses are dropped while circuit is open
+  calls.length = 0;
+  await mgr.sendKeyDispatch(24);
+  assert.equal(calls.length, 0);
+
+  // 4. Circuit reset closes breaker
+  mgr.resetCircuit();
+  assert.equal(mgr.isCircuitOpen(), false);
+  assert.equal(pollFast, false);
+
+  // 5. Offline immediately aborts and drops keys
+  connected = false;
+  mgr.handleOffline();
+  assert.equal(mgr.isCircuitOpen(), true);
+  assert.equal(pollFast, true);
+  await mgr.sendKeyDispatch(25);
+  assert.equal(calls.length, 0);
+  const res = await mgr.liveCall("/api/test");
+  assert.equal(res, null);
+});
+

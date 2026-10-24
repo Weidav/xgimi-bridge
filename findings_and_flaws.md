@@ -155,6 +155,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.21** | `App.jsx` `formatInfoValue` Value Formatting | Cleanly format nested telemetry objects and object arrays with key-value pairs rather than raw JSON strings. |
 | **3.13** | `AidlClient` Exposes Raw Transaction Codes | Wrapped raw transaction codes in semantic domain methods (`setWbRedGain`, `setWhiteBalance`, `setPictureMode`, `setPictureItem`, etc.) and centralized caller dispatch in `DeviceCommands.applyAidlSetting`. |
 | **3.1** | Single-Use Micro-Functions in `ProjectorInfoCollector` | Replaced 20+ enum formatter switch functions with static lookup tables (`Map` / array) and generic `formatEnum` / `formatEnumMap` helpers. |
+| **3.6** | The Live-Request Governance Layer is Over-Engineered | Extracted ~110 lines of shared abort, single-flight semaphore, and circuit breaker logic into `useLiveRequests` custom hook and testable `createLiveRequestManager` state machine with unit test coverage. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -209,11 +210,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
 - **Issue**: ~1,800 lines combining remote control layout, modal sheets, SVG icons, and presentation logic in one file.
 - **Future Check**: Split into component files under `web/src/components/` (`Remote.jsx`, `InfoSheet.jsx`, `SourceSheet.jsx`, `Icons.jsx`).
-
-#### 3.6 The Live-Request Governance Layer is Over-Engineered
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: ~110 lines implementing shared `AbortController`, single-flight semaphore, pending-key slot, and circuit breaker to work around iOS Safari parked fetch replays.
-- **Future Check**: Extract to a dedicated tested custom hook (`useLiveRequests`) with a clean finite state machine.
 
 #### 3.12 `HttpServer` is a Router with Inline Business Logic
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java)
