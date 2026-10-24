@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_HOST, DEFAULT_HOST, DEFAULT_NAME, DEFAULT_PORT, DOMAIN
@@ -80,8 +80,12 @@ class XgimiEntity(CoordinatorEntity[XgimiDataUpdateCoordinator]):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information linking all entities to a single XGIMI Device."""
+        connections = set()
+        if self.coordinator.mac:
+            connections.add((CONNECTION_NETWORK_MAC, self.coordinator.mac))
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry_id)},
+            connections=connections if connections else None,
             name=self.coordinator.device_name,
             manufacturer="XGIMI",
             model="Horizon 20 (XR14A)",

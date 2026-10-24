@@ -104,7 +104,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
 | **3.11** | Synchronous sleep in preset application on HTTP thread | Handled via `DeviceCommands` with pacing and non-blocking caller return. |
-| **3.22** | Home Assistant wake sequence complexity & timeout | Structured wake flow with dual UDP + parallel TCP knocks (8010, 6465, 9), 16s retry window to accommodate STR resume, complementary `/wake` (8081) and `/api/power/on` (8080) optical engine strike, and 10s power transition optimistic state protection. |
+| **3.22** | Home Assistant wake sequence complexity & timeout | Structured wake flow with WoL Magic Packets, mDNS Cast queries, dual UDP + parallel TCP knocks (8010, 6465, 9, 7), concurrent 8081/8080 probing, MAC auto-discovery from ARP cache, 24s retry window to accommodate STR resume, complementary `/wake` (8081) and `/api/power/on` (8080) optical engine strike, and 10s power transition optimistic state protection. |
 | **3.23** | Home Assistant coordinator swallowed connection errors | Distinguishes `UpdateFailed` errors from expected standby timeouts. |
 | **3.26** | `ConfigEntryNotReady` swallowed during setup | Allows Home Assistant setup retry and backoff machinery to function. |
 | **3.28** | Home Assistant config flow lacked host validation | Config flow validates host format (IP/hostname) and populates error messages. |

@@ -15,10 +15,17 @@ from custom_components.xgimi_bridge.button import (
     XgimiRestartButton,
 )
 from custom_components.xgimi_bridge.config_flow import (
+    XgimiBridgeConfigFlow,
     XgimiOptionsFlowHandler,
     _validate_host,
 )
-from custom_components.xgimi_bridge.coordinator import XgimiDataUpdateCoordinator
+from custom_components.xgimi_bridge.const import CONF_HOST, CONF_MAC
+from custom_components.xgimi_bridge.coordinator import (
+    XgimiDataUpdateCoordinator,
+    create_magic_packet,
+    format_mac,
+    resolve_mac_from_arp,
+)
 from custom_components.xgimi_bridge.number import XgimiSlider
 from custom_components.xgimi_bridge.select import (
     XgimiColorTempSelect,
@@ -69,6 +76,95 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
         handler.hass = fake_hass
         handler.handler = "test_entry"
         self.assertEqual(handler.config_entry, fake_entry)
+
+    def test_mac_helpers_and_wol_packet(self):
+        # Valid MAC normalization
+        self.assertEqual(format_mac("AA:BB:CC:DD:EE:FF"), "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(format_mac("aa-bb-cc-dd-ee-ff"), "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(format_mac("112233445566"), "11:22:33:44:55:66")
+
+        # Invalid MAC formats
+        self.assertIsNone(format_mac(None))
+        self.assertIsNone(format_mac(""))
+        self.assertIsNone(format_mac("invalid_mac"))
+        self.assertIsNone(format_mac("11:22:33:44:55"))
+        self.assertIsNone(format_mac("gg:hh:ii:jj:kk:ll"))
+
+        # Magic packet generation
+        pkt = create_magic_packet("aa:bb:cc:dd:ee:ff")
+        self.assertIsNotNone(pkt)
+        self.assertEqual(len(pkt), 102)
+        self.assertEqual(pkt[:6], b"\xff" * 6)
+        self.assertEqual(pkt[6:12], bytes.fromhex("aabbccddeeff"))
+        self.assertEqual(pkt[96:102], bytes.fromhex("aabbccddeeff"))
+
+        # ARP resolution
+        fake_arp = "IP address       HW type     Flags       HW address            Mask     Device\n192.168.1.50     0x1         0x2         aa:bb:cc:dd:ee:ff     *        eth0\n"
+        with patch("builtins.open", unittest.mock.mock_open(read_data=fake_arp)):
+            with patch("socket.gethostbyname", side_effect=lambda h: "192.168.1.50" if h == "xgimi.local" else h):
+                self.assertEqual(resolve_mac_from_arp("192.168.1.50"), "aa:bb:cc:dd:ee:ff")
+                self.assertEqual(resolve_mac_from_arp("xgimi.local"), "aa:bb:cc:dd:ee:ff")
+                self.assertIsNone(resolve_mac_from_arp("192.168.1.99"))
+
+    async def test_config_flow_mac_support(self):
+        flow = XgimiBridgeConfigFlow()
+        flow.hass = MagicMock()
+
+        # Invalid MAC error
+        res_err = await flow.async_step_user({
+            CONF_HOST: "192.168.1.100",
+            CONF_MAC: "invalid_mac_val",
+        })
+        self.assertEqual(res_err["type"], "form")
+        self.assertEqual(res_err["errors"], {CONF_MAC: "invalid_mac"})
+
+        # Valid MAC creates entry with normalized MAC
+        with patch.object(flow, "async_set_unique_id", AsyncMock()), \
+             patch.object(flow, "_abort_if_unique_id_configured", MagicMock()):
+            res_ok = await flow.async_step_user({
+                CONF_HOST: "192.168.1.100",
+                CONF_MAC: "AA:BB:CC:DD:EE:FF",
+            })
+            self.assertEqual(res_ok["type"], "create_entry")
+            self.assertEqual(res_ok["data"][CONF_MAC], "aa:bb:cc:dd:ee:ff")
+
+    async def test_options_flow_mac_support(self):
+        handler = XgimiOptionsFlowHandler()
+        fake_hass = MagicMock()
+        fake_entry = MagicMock()
+        fake_entry.entry_id = "test_entry"
+        fake_entry.data = {CONF_HOST: "192.168.1.50", CONF_MAC: "aa:bb:cc:dd:ee:ff"}
+        fake_hass.config_entries.async_get_known_entry.return_value = fake_entry
+        handler.hass = fake_hass
+        handler.handler = "test_entry"
+
+        # Invalid MAC in options
+        res_err = await handler.async_step_init({
+            CONF_HOST: "192.168.1.51",
+            CONF_MAC: "bad_mac",
+        })
+        self.assertEqual(res_err["errors"], {CONF_MAC: "invalid_mac"})
+
+        # Valid update
+        res_ok = await handler.async_step_init({
+            CONF_HOST: "192.168.1.52",
+            CONF_MAC: "11:22:33:44:55:66",
+        })
+        self.assertEqual(res_ok["type"], "create_entry")
+        fake_hass.config_entries.async_update_entry.assert_called_with(
+            fake_entry,
+            data={CONF_HOST: "192.168.1.52", CONF_MAC: "11:22:33:44:55:66"},
+        )
+
+        # Clear MAC
+        await handler.async_step_init({
+            CONF_HOST: "192.168.1.52",
+            CONF_MAC: "",
+        })
+        fake_hass.config_entries.async_update_entry.assert_called_with(
+            fake_entry,
+            data={CONF_HOST: "192.168.1.52"},
+        )
 
     async def test_coordinator_post_json_response_checking(self):
         hass = MagicMock()
@@ -185,6 +281,43 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(res4)
             self.assertFalse(coordinator.data["awake"])
             self.assertFalse(coordinator.data["online"])
+
+    async def test_coordinator_mac_auto_discovery_and_wol_burst(self):
+        hass = MagicMock()
+        entry = MagicMock()
+        entry.data = {"host": "192.168.1.50"}
+
+        session = MagicMock()
+        coordinator = XgimiDataUpdateCoordinator(hass, "192.168.1.50", "XGIMI", config_entry=entry, session=session)
+        self.assertIsNone(coordinator.mac)
+
+        # 1. Successful poll with ARP entry discovers MAC and updates config entry
+        fake_arp = "IP address       HW type     Flags       HW address            Mask     Device\n192.168.1.50     0x1         0x2         aa:bb:cc:dd:ee:ff     *        eth0\n"
+        succ_resp = AsyncMock()
+        succ_resp.status = 200
+        succ_resp.json = AsyncMock(return_value={"awake": True, "brightness": 50})
+        session.get.return_value.__aenter__.return_value = succ_resp
+
+        with patch("builtins.open", unittest.mock.mock_open(read_data=fake_arp)):
+            await coordinator._async_update_data()
+
+        self.assertEqual(coordinator.mac, "aa:bb:cc:dd:ee:ff")
+        hass.config_entries.async_update_entry.assert_called_with(
+            entry,
+            data={"host": "192.168.1.50", CONF_MAC: "aa:bb:cc:dd:ee:ff"},
+        )
+
+        # 2. WoWLAN knock burst sends 102-byte Magic Packet
+        with patch("custom_components.xgimi_bridge.coordinator._send_udp_knock") as mock_udp_knock, \
+             patch("custom_components.xgimi_bridge.coordinator._send_mdns_knock") as mock_mdns_knock, \
+             patch("custom_components.xgimi_bridge.coordinator._send_tcp_knock", AsyncMock()):
+            await coordinator._send_wowlan_knocks()
+            mock_mdns_knock.assert_called_once_with("192.168.1.50")
+            # Verify Magic packet was passed for WOL port (9) and discard port (7)
+            called_ports = {call[0][1]: call[1]["payload"] for call in mock_udp_knock.call_args_list}
+            self.assertEqual(len(called_ports[9]), 102)
+            self.assertEqual(len(called_ports[7]), 102)
+            self.assertEqual(called_ports[9][:6], b"\xff" * 6)
 
     async def test_coordinator_turn_off(self):
         hass = MagicMock()
