@@ -16,6 +16,7 @@ public class TestRunner {
         failures += run("JsonUtilsTest", JsonUtilsTest::runAll);
         failures += run("BinderTransactTest", BinderTransactTest::runAll);
         failures += run("HdmiInputHelperTest", HdmiInputHelperTest::runAll);
+        failures += run("InputServiceTest", InputServiceTest::runAll);
 
         if (failures == 0) {
             System.out.println("=== ALL JVM REGRESSION TESTS PASSED ===");
