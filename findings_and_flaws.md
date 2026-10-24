@@ -104,6 +104,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.36** | README drift | Updated `README.md` with documented LAN trust model, limits, architecture, and endpoints. |
 | **2.1** | Duplication of Raw MediaTek IPq Binder IPC | Extracted identical AIDL transactions (54 & 59) against `vendor.mediatek.hardware.pq.IPq/default` into a shared `MtkPqClient` helper. |
 | **2.2** | Duplicate Stream and File I/O Helpers | Consolidated redundant 8KB read/write buffer loops and file copy logic into a shared `IoUtils` utility used across `PresetStore` and `LocalAdbClient`. |
+| **2.3** | Duplicate JSON String Escaping & Error Formatting | Replaced duplicated custom string escaping loops with `JSONObject.quote()` across `MiniHttp` and `HttpServer`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -145,11 +146,6 @@ The following items were identified during the codebase audit and remain unaddre
 ---
 
 ### Section 2: Code Duplication & Shared Code Opportunities
-
-#### 2.3 Duplicate JSON String Escaping & Error Formatting
-- **Files**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java) (`jsonString`) and [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java) (`escapeJson`)
-- **Issue**: Identical character-by-character string builders escaping quotes, backslashes, line breaks, and formatting `\u%04x` hex codes.
-- **Future Check**: Keep a single `escapeJson` implementation in `MiniHttp` or reuse `JSONObject.quote()`.
 
 #### 2.4 Duplicate Running Application Lookups
 - **Files**: `HttpServer.java` and `ProjectorInfoCollector.java`.

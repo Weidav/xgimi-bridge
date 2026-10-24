@@ -1,6 +1,7 @@
 package com.xgimi.bridge;
 
 import android.util.Log;
+import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -1032,7 +1033,7 @@ public abstract class MiniHttp {
 
     private void sendError(OutputStream out, Response.Status status, String code, String message) {
         try {
-            String json = "{\"ok\":false,\"code\":\"" + escapeJson(code) + "\",\"error\":\"" + escapeJson(message) + "\"}";
+            String json = "{\"ok\":false,\"code\":" + JSONObject.quote(code != null ? code : "") + ",\"error\":" + JSONObject.quote(message != null ? message : "") + "}";
             byte[] body = json.getBytes(StandardCharsets.UTF_8);
             out.write(("HTTP/1.1 " + status.code + " " + status.description + "\r\n").getBytes(StandardCharsets.US_ASCII));
             out.write("Content-Type: application/json; charset=utf-8\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -1050,20 +1051,6 @@ public abstract class MiniHttp {
                 if (!s.isClosed()) s.close();
             } catch (IOException ignored) {}
         }
-    }
-
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder();
-        for (char c : s.toCharArray()) {
-            if (c == '"') sb.append("\\\"");
-            else if (c == '\\') sb.append("\\\\");
-            else if (c == '\n') sb.append("\\n");
-            else if (c == '\r') sb.append("\\r");
-            else if (c < 32) sb.append(String.format(Locale.US, "\\u%04x", (int) c));
-            else sb.append(c);
-        }
-        return sb.toString();
     }
 
     protected abstract Response serve(Request req);

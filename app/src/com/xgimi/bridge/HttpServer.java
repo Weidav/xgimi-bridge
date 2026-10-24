@@ -485,7 +485,7 @@ public class HttpServer extends MiniHttp {
                     return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid keycode: " + codeStr));
                 }
                 String out = adb.injectKey(code);
-                return json(Response.Status.OK, "{\"ok\":true,\"key\":" + code + ",\"out\":" + jsonString(out) + "}");
+                return json(Response.Status.OK, "{\"ok\":true,\"key\":" + code + ",\"out\":" + JSONObject.quote(out != null ? out : "") + "}");
             }
             if (uri.equals("/api/adb/text")) {
                 if (m != Method.POST) return methodNotAllowed("POST");
@@ -501,7 +501,7 @@ public class HttpServer extends MiniHttp {
                     return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
                 }
                 String out = adb.injectText(text);
-                return json(Response.Status.OK, "{\"ok\":true,\"out\":" + jsonString(out) + "}");
+                return json(Response.Status.OK, "{\"ok\":true,\"out\":" + JSONObject.quote(out != null ? out : "") + "}");
             }
         } catch (JSONException e) {
             return json(Response.Status.BAD_REQUEST, errJson("invalid_request", "Invalid JSON: " + e.getMessage()));
@@ -560,20 +560,6 @@ public class HttpServer extends MiniHttp {
             obj.put("error", msg != null ? msg : "");
         } catch (JSONException ignored) {}
         return obj.toString();
-    }
-
-    private static String jsonString(String s) {
-        if (s == null) return "null";
-        StringBuilder sb = new StringBuilder("\"");
-        for (char c : s.toCharArray()) {
-            if (c == '"' || c == '\\') sb.append('\\').append(c);
-            else if (c == '\n') sb.append("\\n");
-            else if (c == '\r') sb.append("\\r");
-            else if (c < 32) sb.append(String.format("\\u%04x", (int) c));
-            else sb.append(c);
-        }
-        sb.append('"');
-        return sb.toString();
     }
 
     private boolean isAwake() {
