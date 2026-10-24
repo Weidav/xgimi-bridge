@@ -22,4 +22,5 @@ web/dist/
 .DS_Store
 *.swp
 *.log
+Screenshot*.png
 .idea/
