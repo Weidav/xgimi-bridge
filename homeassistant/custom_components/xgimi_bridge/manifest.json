@@ -5,6 +5,7 @@
   "documentation": "https://github.com/Weidav/xgimi-bridge",
   "issue_tracker": "https://github.com/Weidav/xgimi-bridge/issues",
   "dependencies": [],
+  "requirements": [],
   "codeowners": [
     "@Weidav"
   ],

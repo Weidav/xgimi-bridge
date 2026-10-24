@@ -135,6 +135,8 @@ The following items from the original audit were addressed and resolved followin
 | **2.10** | Keycode Tables Duplicated in Three Places | Unified keycode dictionary in `const.py` (`KEYCODES`) matching Web remote keycodes, generating HA button entities cleanly. |
 | **2.11 / 3.34** | Knob List Duplication & Positional `SLIDERS` Tuple | Exposed knob limits via `/api/enums` and refactored positional `SLIDERS` tuples into `SliderConfig(NamedTuple)` in `const.py`. |
 | **3.33** | Uncancelled delayed refresh tasks on unload | Tracked and cancelled all pending tasks in `async_unload_entry`. |
+| **3.35** | `manifest.json` Requirements | Explicitly declared `"requirements": []` to conform to Home Assistant custom integration packaging standards. |
+| **3.36** | `pyproject.toml` Python Requirement | Lowered `requires-python` from `>=3.14` to `>=3.13` to align with standard Home Assistant environments. |
 
 
 ---
@@ -274,16 +276,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`homeassistant/custom_components/xgimi_bridge/coordinator.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/coordinator.py)
 - **Issue**: Each successful POST triggers an immediate full coordinator refresh (`await self.async_request_refresh()`), amplifying network requests during rapid slider adjustments.
 - **Future Check**: Debounce coordinator refreshes or update `_last_data` optimistically from request payload.
-
-#### 3.35 `manifest.json` Requirements
-- **File**: [`homeassistant/custom_components/xgimi_bridge/manifest.json`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/manifest.json)
-- **Issue**: Relies on HA core bundle without declaring explicit dependencies.
-- **Future Check**: Align with Home Assistant packaging standards.
-
-#### 3.36 `pyproject.toml` Python Requirement
-- **File**: [`homeassistant/pyproject.toml`](file:///workspaces/xgimi-bridge/homeassistant/pyproject.toml)
-- **Issue**: `requires-python = ">=3.14"` is higher than standard Home Assistant requirements.
-- **Future Check**: Lower `requires-python` to `>=3.13`.
 
 #### 3.37 `vite.config.js` Base Path
 - **File**: [`web/vite.config.js`](file:///workspaces/xgimi-bridge/web/vite.config.js)
