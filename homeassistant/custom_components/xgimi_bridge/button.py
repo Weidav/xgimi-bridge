@@ -50,7 +50,45 @@ async def async_setup_entry(
     )
 
 
-class XgimiKeyButton(XgimiEntity, ButtonEntity):
+class XgimiActionButton(XgimiEntity, ButtonEntity):
+    """Base button entity executing a bridge action."""
+
+    def __init__(
+        self,
+        coordinator: XgimiDataUpdateCoordinator,
+        suffix: str,
+        name: str | None = None,
+        icon: str | None = None,
+        device_class: ButtonDeviceClass | None = None,
+        entity_category: EntityCategory | None = None,
+    ) -> None:
+        """Initialize action button."""
+        super().__init__(coordinator, f"btn_{suffix}")
+        if name is not None:
+            self._attr_name = name
+        if icon is not None:
+            self._attr_icon = icon
+        if device_class is not None:
+            self._attr_device_class = device_class
+        if entity_category is not None:
+            self._attr_entity_category = entity_category
+
+    async def _execute_press(self) -> bool:
+        """Execute the action, returning True on success."""
+        raise NotImplementedError
+
+    def _failure_message(self) -> str:
+        """Format the error message when action fails."""
+        return f"Action failed on {self.name}"
+
+    async def async_press(self) -> None:
+        """Handle button press."""
+        ok = await self._execute_press()
+        if not ok:
+            raise HomeAssistantError(self._failure_message())
+
+
+class XgimiKeyButton(XgimiActionButton):
     """Button to inject a remote keycode."""
 
     def __init__(
@@ -62,19 +100,17 @@ class XgimiKeyButton(XgimiEntity, ButtonEntity):
         icon: str,
     ) -> None:
         """Initialize button entity."""
-        super().__init__(coordinator, f"btn_{suffix}")
-        self._attr_name = name
+        super().__init__(coordinator, suffix, name=name, icon=icon)
         self._key_code = key_code
-        self._attr_icon = icon
 
-    async def async_press(self) -> None:
-        """Handle button press."""
-        ok = await self.coordinator.async_inject_key(self._key_code)
-        if not ok:
-            raise HomeAssistantError(f"Failed to inject key {self._key_code} on {self.name}")
+    async def _execute_press(self) -> bool:
+        return await self.coordinator.async_inject_key(self._key_code)
+
+    def _failure_message(self) -> str:
+        return f"Failed to inject key {self._key_code} on {self.name}"
 
 
-class XgimiPowerActionButton(XgimiEntity, ButtonEntity):
+class XgimiPowerActionButton(XgimiActionButton):
     """Button to trigger power actions (led-off, led-on)."""
 
     def __init__(
@@ -86,19 +122,17 @@ class XgimiPowerActionButton(XgimiEntity, ButtonEntity):
         icon: str,
     ) -> None:
         """Initialize action button."""
-        super().__init__(coordinator, f"btn_{suffix}")
-        self._attr_name = name
+        super().__init__(coordinator, suffix, name=name, icon=icon)
         self._action = action
-        self._attr_icon = icon
 
-    async def async_press(self) -> None:
-        """Handle button press."""
-        ok = await self.coordinator.async_post_json(f"/api/power/{self._action}")
-        if not ok:
-            raise HomeAssistantError(f"Power action {self._action} failed on {self.name}")
+    async def _execute_press(self) -> bool:
+        return await self.coordinator.async_post_json(f"/api/power/{self._action}")
+
+    def _failure_message(self) -> str:
+        return f"Power action {self._action} failed on {self.name}"
 
 
-class XgimiRestartButton(XgimiEntity, ButtonEntity):
+class XgimiRestartButton(XgimiActionButton):
     """Button to reboot the projector."""
 
     _attr_name = "Restart Projector"
@@ -108,10 +142,10 @@ class XgimiRestartButton(XgimiEntity, ButtonEntity):
 
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize restart button."""
-        super().__init__(coordinator, "btn_restart")
+        super().__init__(coordinator, "restart")
 
-    async def async_press(self) -> None:
-        """Reboot projector."""
-        ok = await self.coordinator.async_post_json("/api/power/restart")
-        if not ok:
-            raise HomeAssistantError(f"Restart failed on {self.name}")
+    async def _execute_press(self) -> bool:
+        return await self.coordinator.async_post_json("/api/power/restart")
+
+    def _failure_message(self) -> str:
+        return f"Restart failed on {self.name}"
