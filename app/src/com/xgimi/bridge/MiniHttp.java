@@ -17,15 +17,11 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -154,18 +150,14 @@ public abstract class MiniHttp {
     public static final class Request {
         public final Method method;
         public final String uri;
-        public final String query;
-        public final Map<String, String> parms;
         public final Map<String, String> headers;
         public final byte[] body;
         public final InetAddress remoteAddress;
 
-        public Request(Method method, String uri, String query, Map<String, String> parms,
-                       Map<String, String> headers, byte[] body, InetAddress remoteAddress) {
+        public Request(Method method, String uri, Map<String, String> headers,
+                       byte[] body, InetAddress remoteAddress) {
             this.method = method;
             this.uri = uri;
-            this.query = query;
-            this.parms = parms != null ? parms : Collections.<String, String>emptyMap();
             this.headers = headers != null ? headers : Collections.<String, String>emptyMap();
             this.body = body != null ? body : new byte[0];
             this.remoteAddress = remoteAddress;
@@ -184,14 +176,9 @@ public abstract class MiniHttp {
     private final AtomicInteger activeConnections = new AtomicInteger(0);
     private final ConcurrentHashMap<InetAddress, AtomicInteger> peerConnections = new ConcurrentHashMap<>();
 
-    private static final ThreadLocal<SimpleDateFormat> RFC1123 = new ThreadLocal<SimpleDateFormat>() {
-        @Override
-        protected SimpleDateFormat initialValue() {
-            SimpleDateFormat sdf = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US);
-            sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
-            return sdf;
-        }
-    };
+    private static final java.time.format.DateTimeFormatter RFC1123 =
+            java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
+                    .withZone(java.time.ZoneOffset.UTC);
 
     protected MiniHttp(int port) {
         this(port, Limits.forPort8080());
@@ -447,15 +434,15 @@ public abstract class MiniHttp {
                     break;
                 }
 
-                // Strip fragment
-                int hashIdx = rawUri.indexOf('#');
-                if (hashIdx >= 0) rawUri = rawUri.substring(0, hashIdx);
+                // RFC 9112 §3.2.1: Reject fragment in request-target
+                if (rawUri.indexOf('#') >= 0) {
+                    sendError(out, Response.Status.BAD_REQUEST, "invalid_request", "Fragment identifiers not allowed in request target");
+                    break;
+                }
 
-                // Strip query string
+                // Strip query string (query parameters are not used by the REST API)
                 int queryIdx = rawUri.indexOf('?');
                 String pathOnly = queryIdx >= 0 ? rawUri.substring(0, queryIdx) : rawUri;
-                String query = queryIdx >= 0 ? rawUri.substring(queryIdx + 1) : null;
-                Map<String, String> parms = parseQueryParameters(query);
 
                 // URL decode preserving '+' as literal
                 String decodedUri;
@@ -788,7 +775,7 @@ public abstract class MiniHttp {
                 }
 
                 // Dispatch to handler
-                Request req = new Request(method, decodedUri, query, parms, headers, body, socket.getInetAddress());
+                Request req = new Request(method, decodedUri, headers, body, socket.getInetAddress());
                 Response res;
                 try {
                     res = serve(req);
@@ -839,7 +826,7 @@ public abstract class MiniHttp {
                     out.write(("Content-Length: " + resLength + "\r\n").getBytes(StandardCharsets.US_ASCII));
 
                     // Date
-                    out.write(("Date: " + RFC1123.get().format(new Date()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                    out.write(("Date: " + RFC1123.format(java.time.Instant.now()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
 
                     // Connection
                     if (shouldClose) {
@@ -943,32 +930,6 @@ public abstract class MiniHttp {
         }
     }
 
-    private static Map<String, String> parseQueryParameters(String query) {
-        if (query == null || query.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<String, String> parms = new HashMap<>();
-        String[] pairs = query.split("&");
-        for (String pair : pairs) {
-            if (pair.isEmpty()) continue;
-            int eq = pair.indexOf('=');
-            String key;
-            String val = "";
-            if (eq >= 0) {
-                key = pair.substring(0, eq);
-                val = pair.substring(eq + 1);
-            } else {
-                key = pair;
-            }
-            try {
-                key = URLDecoder.decode(key.replace("+", "%2B"), "UTF-8");
-                val = URLDecoder.decode(val.replace("+", "%2B"), "UTF-8");
-            } catch (Exception ignored) {}
-            parms.put(key, val);
-        }
-        return parms;
-    }
-
     private void sendOverloadAndClose(Socket socket, String reason) {
         try {
             setSocketTimeoutSafe(socket, 1000);
@@ -987,7 +948,7 @@ public abstract class MiniHttp {
             out.write(("HTTP/1.1 " + status.code + " " + status.description + "\r\n").getBytes(StandardCharsets.US_ASCII));
             out.write("Content-Type: application/json; charset=utf-8\r\n".getBytes(StandardCharsets.US_ASCII));
             out.write(("Content-Length: " + body.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
-            out.write(("Date: " + RFC1123.get().format(new Date()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.write(("Date: " + RFC1123.format(java.time.Instant.now()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
             out.write("Connection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
             out.write(body);
             out.flush();
