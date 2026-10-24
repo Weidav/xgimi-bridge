@@ -35,20 +35,39 @@ def format_host(host: str) -> str:
 
 
 def _send_udp_knock(host: str, port: int, payload: bytes = b"\x00") -> None:
-    """Send a best-effort UDP wake knock without blocking."""
+    """Send a best-effort UDP wake knock without blocking (unicast + broadcast)."""
     clean_host = host.strip("[]")
     is_ipv6 = ":" in clean_host
     sock_family = socket.AF_INET6 if is_ipv6 else socket.AF_INET
     try:
         sock = socket.socket(sock_family, socket.SOCK_DGRAM)
         sock.setblocking(False)
+        if not is_ipv6:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.sendto(payload, (clean_host, port))
         sock.close()
     except Exception as err:
-        _LOGGER.debug("UDP wake knock to %s:%s failed: %s", host, port, err)
+        _LOGGER.debug(
+            "UDP wake knock to %s:%s failed: %s (%s)",
+            host,
+            port,
+            type(err).__name__,
+            err,
+        )
+
+    # Also send broadcast UDP for IPv4 to bypass stale ARP tables on sleeping targets
+    if not is_ipv6 and clean_host != "255.255.255.255":
+        try:
+            b_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            b_sock.setblocking(False)
+            b_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            b_sock.sendto(payload, ("255.255.255.255", port))
+            b_sock.close()
+        except Exception:
+            pass
 
 
-async def _send_tcp_knock(host: str, port: int, timeout: float = 0.4) -> None:
+async def _send_tcp_knock(host: str, port: int, timeout: float = 0.8) -> None:
     """Send a quick TCP connection attempt to trigger WoWLAN."""
     try:
         conn = asyncio.open_connection(host, port)
@@ -56,7 +75,9 @@ async def _send_tcp_knock(host: str, port: int, timeout: float = 0.4) -> None:
         writer.close()
         await writer.wait_closed()
     except (OSError, TimeoutError) as err:
-        _LOGGER.debug("TCP WoWLAN knock on port %s: %s", port, err)
+        _LOGGER.debug(
+            "TCP WoWLAN knock on port %s: %s (%s)", port, type(err).__name__, err
+        )
 
 
 class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -168,26 +189,41 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return self._last_data
 
+    async def _send_cast_http_knock(self) -> None:
+        """Send an HTTP GET knock to Cast port 8010 (as proven in xgimi_wake_knock)."""
+        cast_url = f"http://{self.formatted_host}:{CAST_WAKE_PORT}/"
+        try:
+            async with self.session.get(
+                cast_url, timeout=aiohttp.ClientTimeout(total=1.2)
+            ):
+                pass
+        except Exception as err:
+            _LOGGER.debug(
+                "Cast HTTP knock on port %s: %s (%s)",
+                CAST_WAKE_PORT,
+                type(err).__name__,
+                err,
+            )
+
+    async def _send_wowlan_knocks(self) -> None:
+        """Send a comprehensive burst of WoWLAN wake stimuli across UDP and TCP."""
+        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT, WOL_WAKE_PORT):
+            _send_udp_knock(self.host, port)
+
+        await asyncio.gather(
+            self._send_cast_http_knock(),
+            _send_tcp_knock(self.host, CAST_WAKE_PORT, timeout=0.8),
+            _send_tcp_knock(self.host, REMOTE_WAKE_PORT, timeout=0.8),
+            return_exceptions=True,
+        )
+
     async def async_turn_on(self) -> bool:
         """Wake projector from WoWLAN standby and turn display on."""
         if self._unloaded:
             return False
 
-        # Step 1: Rapid WoWLAN knocks (UDP + TCP in parallel) to wake CPU from STR
-        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT, WOL_WAKE_PORT):
-            _send_udp_knock(self.host, port)
-
-        await asyncio.gather(
-            _send_tcp_knock(self.host, CAST_WAKE_PORT, timeout=0.4),
-            _send_tcp_knock(self.host, REMOTE_WAKE_PORT, timeout=0.4),
-            return_exceptions=True,
-        )
-
-        # Brief burst: repeat UDP knock after 100ms
-        await asyncio.sleep(0.1)
-        for port in (CAST_WAKE_PORT, REMOTE_WAKE_PORT, WOL_WAKE_PORT):
-            _send_udp_knock(self.host, port)
-
+        # Initial WoWLAN knock burst
+        await self._send_wowlan_knocks()
         await asyncio.sleep(0.4)
 
         # Step 2: Hit shell-UID wake listener on port 8081 (KeyDispatcher) and port 8080
@@ -196,12 +232,17 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         wake_url = f"http://{self.formatted_host}:{WAKE_PORT}/wake"
         on_url = f"http://{self.formatted_host}:{DEFAULT_PORT}/api/power/on"
 
-        deadline = time.monotonic() + 16.0  # 16-second total wake window
+        deadline = time.monotonic() + 24.0  # 24-second total wake window
         attempts = 0
-        max_attempts = 8
+        max_attempts = 12
 
         while time.monotonic() < deadline and attempts < max_attempts:
             attempts += 1
+
+            # Periodically re-send wake knocks in case initial burst was missed during Wi-Fi sleep cycle
+            if attempts in (3, 6, 9):
+                await self._send_wowlan_knocks()
+
             if not woke:
                 try:
                     async with self.session.post(
@@ -211,11 +252,16 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             data = await resp.json()
                             if data and data.get("ok") is not False:
                                 woke = True
-                except (aiohttp.ClientError, TimeoutError):
-                    pass
+                except (aiohttp.ClientError, TimeoutError) as err:
+                    _LOGGER.debug(
+                        "Wake 8081 attempt %s failed: %s (%s)",
+                        attempts,
+                        type(err).__name__,
+                        err,
+                    )
 
             if woke:
-                # Wake acknowledged by KeyDispatcher; confirm with best-effort power/on
+                # Wake acknowledged by KeyDispatcher; confirm with best-effort power/on to strike lamp
                 try:
                     async with self.session.post(
                         on_url, timeout=aiohttp.ClientTimeout(total=1.0)
@@ -237,7 +283,12 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             fallback_ok = True
                             break
             except (aiohttp.ClientError, TimeoutError) as err:
-                _LOGGER.debug("Power on request during wake attempt: %s", err)
+                _LOGGER.debug(
+                    "Power on 8080 attempt %s failed: %s (%s)",
+                    attempts,
+                    type(err).__name__,
+                    err,
+                )
 
             await asyncio.sleep(0.5)
 
