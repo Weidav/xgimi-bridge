@@ -135,6 +135,11 @@ The following items from the original audit were addressed and resolved followin
 | **2.10** | Keycode Tables Duplicated in Three Places | Unified keycode dictionary in `const.py` (`KEYCODES`) matching Web remote keycodes, generating HA button entities cleanly. |
 | **2.11 / 3.34** | Knob List Duplication & Positional `SLIDERS` Tuple | Exposed knob limits via `/api/enums` and refactored positional `SLIDERS` tuples into `SliderConfig(NamedTuple)` in `const.py`. |
 | **3.33** | Uncancelled delayed refresh tasks on unload | Tracked and cancelled all pending tasks in `async_unload_entry`. |
+| **3.25** | Coordinator Entry ID Attribute | Declared `self.config_entry_id` attribute directly in `XgimiDataUpdateCoordinator.__init__` rather than ad-hoc runtime assignment. |
+| **3.27** | `device_info` Hardcodes Model and OS Version | Expose model and OS version dynamically from `/api/picture` snapshot and coordinator telemetry with sensible fallbacks. |
+| **3.29** | `select.py` Preset Entity Local State | Derived preset entity state directly from coordinator data (`active_preset`) to prevent local state divergence. |
+| **3.30** | `select.py` Input Source Defaults to "Apps" | Returned `None` for unrecognized or absent input sources so Home Assistant cleanly displays unknown state. |
+| **3.32** | `async_post_json` Refreshes on Every Write | Optimistically updated `_last_data` cache immediately on successful POST requests before scheduling refresh. |
 | **3.35** | `manifest.json` Requirements | Explicitly declared `"requirements": []` to conform to Home Assistant custom integration packaging standards. |
 | **3.36** | `pyproject.toml` Python Requirement | Lowered `requires-python` from `>=3.14` to `>=3.13` to align with standard Home Assistant environments. |
 
@@ -250,32 +255,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
 - **Issue**: `JSON.stringify(val)` is rendered directly into table cells for nested objects/arrays in "Stats for nerds".
 - **Future Check**: Format nested objects with badges or key-value sub-tables.
-
-
-#### 3.25 `__init__.py` Sets an Ad-Hoc Attribute on the Coordinator
-- **File**: [`homeassistant/custom_components/xgimi_bridge/__init__.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/__init__.py)
-- **Issue**: `coordinator.config_entry_id = entry.entry_id` sets an undeclared attribute on `DataUpdateCoordinator`.
-- **Future Check**: Pass `entry.entry_id` into `XgimiDataUpdateCoordinator.__init__` as a declared attribute.
-
-#### 3.27 `device_info` Hardcodes Model and OS Version
-- **File**: [`homeassistant/custom_components/xgimi_bridge/__init__.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/__init__.py)
-- **Issue**: Hardcodes `model="Horizon 20 (XR14A)"` and `sw_version="Android 14"` in `device_info`.
-- **Future Check**: Populate device model and OS version dynamically from coordinator state.
-
-#### 3.29 `select.py` Preset Entity Keeps Local State that Coordinator Overwrites
-- **File**: [`homeassistant/custom_components/xgimi_bridge/select.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/select.py)
-- **Issue**: `XgimiPresetSelect` stores `_current_preset_name` locally and defaults `options` to `["Balanced"]` when empty, risking state divergence.
-- **Future Check**: Track applied preset in coordinator state or make preset entity action-only.
-
-#### 3.30 `select.py` Input Source Defaults to "Apps" on Unknown Values
-- **File**: [`homeassistant/custom_components/xgimi_bridge/select.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/select.py)
-- **Issue**: `INPUT_SOURCES.get(raw, "Apps")` reports "Apps" for `None` or unrecognized input sources.
-- **Future Check**: Return `None` for unknown values so Home Assistant displays "Unknown".
-
-#### 3.32 `async_post_json` Refreshes on Every Write
-- **File**: [`homeassistant/custom_components/xgimi_bridge/coordinator.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/coordinator.py)
-- **Issue**: Each successful POST triggers an immediate full coordinator refresh (`await self.async_request_refresh()`), amplifying network requests during rapid slider adjustments.
-- **Future Check**: Debounce coordinator refreshes or update `_last_data` optimistically from request payload.
 
 #### 3.37 `vite.config.js` Base Path
 - **File**: [`web/vite.config.js`](file:///workspaces/xgimi-bridge/web/vite.config.js)

@@ -192,6 +192,9 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.mac = format_mac(config_entry.data.get(CONF_MAC))
         if not self.mac:
             self.mac = resolve_mac_from_arp(self.host)
+        self.config_entry_id: str = (
+            str(getattr(config_entry, "entry_id", "")) if config_entry is not None else ""
+        )
         self._unloaded = False
         self._refresh_tasks: set[asyncio.TimerHandle | asyncio.Task[Any]] = set()
         self._power_transition_until: float = 0.0
@@ -200,7 +203,24 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "online": False,
             "picture": {},
             "presets": [],
+            "active_preset": None,
         }
+
+    @property
+    def model(self) -> str:
+        """Return projector hardware model from telemetry or default."""
+        pic = self._last_data.get("picture")
+        if isinstance(pic, dict) and pic.get("model"):
+            return str(pic["model"])
+        return "Horizon 20 (XR14A)"
+
+    @property
+    def sw_version(self) -> str:
+        """Return projector software / OS version from telemetry or default."""
+        pic = self._last_data.get("picture")
+        if isinstance(pic, dict) and pic.get("osVersion"):
+            return str(pic["osVersion"])
+        return "Android 14"
 
     async def async_unload(self) -> None:
         """Cancel delayed refresh tasks and mark coordinator unloaded."""
@@ -473,6 +493,21 @@ class XgimiDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             return False
                     except (ValueError, aiohttp.ContentTypeError):
                         pass
+                    # Optimistically update cached state
+                    if isinstance(body, dict) and "value" in body and path.startswith("/api/picture/"):
+                        setting_key = path[len("/api/picture/"):].replace("-", "")
+                        if path == "/api/picture/wb-red":
+                            setting_key = "wbRed"
+                        elif path == "/api/picture/wb-green":
+                            setting_key = "wbGreen"
+                        elif path == "/api/picture/wb-blue":
+                            setting_key = "wbBlue"
+                        self._last_data.setdefault("picture", {})[setting_key] = body["value"]
+                        self.async_set_updated_data(self._last_data)
+                    elif isinstance(body, dict) and "to" in body and path == "/api/input":
+                        self._last_data.setdefault("picture", {})["currentInputSource"] = body["to"]
+                        self.async_set_updated_data(self._last_data)
+
                     if not self._unloaded:
                         await self.async_request_refresh()
                     return True

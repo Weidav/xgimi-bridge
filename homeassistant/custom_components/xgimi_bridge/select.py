@@ -56,7 +56,7 @@ class XgimiInputSourceSelect(XgimiEntity, SelectEntity):
     def current_option(self) -> str | None:
         """Return currently selected input source."""
         raw = self.coordinator.data.get("picture", {}).get("currentInputSource")
-        return INPUT_SOURCES.get(raw, "Apps")
+        return INPUT_SOURCES.get(raw)
 
     async def async_select_option(self, option: str) -> None:
         """Switch input source."""
@@ -77,21 +77,20 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
     def __init__(self, coordinator: XgimiDataUpdateCoordinator) -> None:
         """Initialize preset select."""
         super().__init__(coordinator, "select_preset")
-        self._current_preset_name: str | None = None
 
     @property
     def options(self) -> list[str]:
         """Return list of available preset names."""
         presets = self.coordinator.data.get("presets", [])
-        names = [
+        return [
             p.get("name") for p in presets if isinstance(p, dict) and p.get("name")
         ]
-        return names if names else ["Balanced"]
 
     @property
     def current_option(self) -> str | None:
         """Return active preset name if known."""
-        return self._current_preset_name
+        cur = self.coordinator.data.get("active_preset")
+        return cur if cur in self.options else None
 
     async def async_select_option(self, option: str) -> None:
         """Apply selected preset."""
@@ -108,7 +107,7 @@ class XgimiPresetSelect(XgimiEntity, SelectEntity):
                 )
                 if not ok:
                     raise HomeAssistantError(f"Failed to apply preset {option}")
-                self._current_preset_name = option
+                self.coordinator.data["active_preset"] = option
                 self.async_write_ha_state()
                 break
         if not matched:

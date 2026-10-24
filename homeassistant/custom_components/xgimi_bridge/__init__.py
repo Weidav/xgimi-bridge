@@ -32,7 +32,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     name = entry.data.get(CONF_NAME, DEFAULT_NAME)
 
     coordinator = XgimiDataUpdateCoordinator(hass, host, name, config_entry=entry)
-    coordinator.config_entry_id = entry.entry_id
 
     # Refresh data, but do not fail setup if projector is off in standby
     try:
@@ -88,7 +87,7 @@ class XgimiEntity(CoordinatorEntity[XgimiDataUpdateCoordinator]):
             connections=connections if connections else None,
             name=self.coordinator.device_name,
             manufacturer="XGIMI",
-            model="Horizon 20 (XR14A)",
-            sw_version="Android 14",
+            model=self.coordinator.model,
+            sw_version=self.coordinator.sw_version,
             configuration_url=f"http://{self.coordinator.formatted_host}:{DEFAULT_PORT}",
         )

@@ -469,6 +469,39 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HomeAssistantError):
             await preset_sel.async_select_option("MissingPreset")
 
+    async def test_coordinator_attributes_and_select_states(self):
+        hass = MagicMock()
+        entry = MagicMock()
+        entry.entry_id = "test_entry_456"
+        entry.data = {"host": "192.168.1.100"}
+        session = MagicMock()
+
+        coordinator = XgimiDataUpdateCoordinator(hass, "192.168.1.100", "XGIMI Test", config_entry=entry, session=session)
+        self.assertEqual(coordinator.config_entry_id, "test_entry_456")
+        self.assertEqual(coordinator.model, "Horizon 20 (XR14A)")
+        self.assertEqual(coordinator.sw_version, "Android 14")
+
+        # Dynamic model & OS from coordinator data
+        coordinator._last_data["picture"] = {"model": "Horizon Ultra", "osVersion": "Android 13"}
+        coordinator.data = coordinator._last_data
+        self.assertEqual(coordinator.model, "Horizon Ultra")
+        self.assertEqual(coordinator.sw_version, "Android 13")
+
+        # Unknown input source returns None
+        input_sel = XgimiInputSourceSelect(coordinator)
+        coordinator.data["picture"]["currentInputSource"] = "UNKNOWN_SOURCE"
+        self.assertIsNone(input_sel.current_option)
+        coordinator.data["picture"]["currentInputSource"] = "E_INPUT_SOURCE_HDMI1"
+        self.assertEqual(input_sel.current_option, "HDMI 1")
+
+        # Preset select derives state from coordinator
+        preset_sel = XgimiPresetSelect(coordinator)
+        coordinator.data["presets"] = [{"id": "p1", "name": "Cinema"}]
+        coordinator.data["active_preset"] = "Cinema"
+        self.assertEqual(preset_sel.current_option, "Cinema")
+        coordinator.data["active_preset"] = "Nonexistent"
+        self.assertIsNone(preset_sel.current_option)
+
 
 if __name__ == "__main__":
     unittest.main()

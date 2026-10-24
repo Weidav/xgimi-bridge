@@ -133,6 +133,8 @@ public class HttpServer extends MiniHttp {
             Map<String, Object> snap = aidl.snapshot();
             snap.put("awake", isAwake());
             snap.put("runningApp", getRunningApp(ctx));
+            snap.put("model", android.os.Build.MODEL);
+            snap.put("osVersion", "Android " + android.os.Build.VERSION.RELEASE);
             return json(Response.Status.OK, JsonUtils.mapToJson(snap).toString());
         }
 
