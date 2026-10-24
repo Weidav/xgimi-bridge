@@ -34,32 +34,7 @@ const GAME_MODE_OPTIONS = [
   { value: 2, label: "Boost" },
 ];
 
-import { api, extractWritableValues, epToField } from "./api.js";
-
-function sourceTitle(picture, inputs) {
-  if (!picture) return "";
-  const src = picture.currentInputSource;
-  if (src === "E_INPUT_SOURCE_STORAGE") return "Android TV";
-  if (typeof src === "string" && src.startsWith("E_INPUT_SOURCE_HDMI")) {
-    const port = Number(src.replace("E_INPUT_SOURCE_HDMI", ""));
-    return inputLabelForPort(inputs, port, `HDMI ${port}`);
-  }
-  return src || "";
-}
-
-function formatAppName(pkg) {
-  if (!pkg || typeof pkg !== "string") return "";
-  const trimmed = pkg.trim();
-  const lastDot = trimmed.lastIndexOf(".");
-  if (lastDot === -1) {
-    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-  }
-  const beforeLastDot = trimmed.substring(0, lastDot);
-  const prevDot = beforeLastDot.lastIndexOf(".");
-  const name = prevDot === -1 ? beforeLastDot : beforeLastDot.substring(prevDot + 1);
-  if (!name) return "";
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
+import { api, extractWritableValues, epToField, formatAppName, sourceTitle } from "./api.js";
 
 function PinIcon() {
   return (
@@ -707,8 +682,8 @@ function SourceSheet({ inputs, picture, runningApp: initialRunningApp, busy, onP
         <h3 className="modal-title">Source</h3>
         <div className="input-rows">
           <button className={"input-btn input-btn-row" + activeFor("E_INPUT_SOURCE_STORAGE")} onClick={() => onPick("STORAGE")} disabled={busy}>
-            <span>Android TV</span>
-            {appName && <small>{appName}</small>}
+            <span>{appName || "Android TV"}</span>
+            {appName && <small>Android TV</small>}
           </button>
           {[1, 2].map((port) => {
             const cec = inputLabelForPort(inputs, port, "");
@@ -865,8 +840,9 @@ function RemoteCard({
   inputs,
   state,
 }) {
+  const runningApp = state?.runningApp || picture?.runningApp;
   const sourceName = connected
-    ? (picture ? sourceTitle(picture, inputs) : (state?.ready ? "Connected" : "Connecting..."))
+    ? (picture ? sourceTitle(picture, inputs, runningApp) : (state?.ready ? (formatAppName(runningApp) || "Connected") : "Connecting..."))
     : "Offline";
 
   return (

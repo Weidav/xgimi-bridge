@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS } from "../../web/src/api.js";
+import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS, formatAppName, sourceTitle } from "../../web/src/api.js";
 
 test("extractWritableValues filters out read-only and non-numeric fields", () => {
   const fullPicture = {
@@ -97,4 +97,33 @@ test("slider queue coalesces rapid updates", async () => {
 
   assert.equal(sentValues.length, 1);
   assert.equal(sentValues[0].target, 75);
+});
+
+test("formatAppName formats package names and filters launchers", () => {
+  assert.equal(formatAppName("org.jellyfin.androidtv"), "Jellyfin");
+  assert.equal(formatAppName("com.netflix.ninja"), "Netflix");
+  assert.equal(formatAppName("com.google.android.youtube.tv"), "Youtube");
+  assert.equal(formatAppName("com.google.android.tvlauncher"), "");
+  assert.equal(formatAppName("com.google.android.apps.tv.launcherx"), "");
+  assert.equal(formatAppName("com.xgimi.bridge"), "");
+  assert.equal(formatAppName(null), "");
+  assert.equal(formatAppName(""), "");
+});
+
+test("sourceTitle resolves running app name on Android TV and CEC labels on HDMI", () => {
+  const picStorageApp = { currentInputSource: "E_INPUT_SOURCE_STORAGE", runningApp: "org.jellyfin.androidtv" };
+  assert.equal(sourceTitle(picStorageApp, [], "org.jellyfin.androidtv"), "Jellyfin");
+
+  const picStorageNoApp = { currentInputSource: "E_INPUT_SOURCE_STORAGE" };
+  assert.equal(sourceTitle(picStorageNoApp, [], ""), "Android TV");
+
+  const inputs = [
+    { hdmiPortId: 1, displayName: "Apple TV" },
+    { hdmiPortId: 2, displayName: "HDMI 2" },
+  ];
+  const picHdmi1 = { currentInputSource: "E_INPUT_SOURCE_HDMI1" };
+  assert.equal(sourceTitle(picHdmi1, inputs), "Apple TV");
+
+  const picHdmi2 = { currentInputSource: "E_INPUT_SOURCE_HDMI2" };
+  assert.equal(sourceTitle(picHdmi2, inputs), "HDMI 2");
 });

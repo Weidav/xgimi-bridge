@@ -345,8 +345,25 @@ ul.presets {
   color: var(--muted);
 }
 
+.display-settings {
+  max-width: 286px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .display-settings>h2 {
   margin: 0 0 12px;
+}
+
+.display-settings .sub-card-btn {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.display-settings .sub-card-btn-meta {
+  font-size: 11.5px;
 }
 
 .sub-card {
