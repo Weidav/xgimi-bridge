@@ -22,9 +22,30 @@ public class SettingRulesTest {
         assertTrue(enums.has("gameModes"), "Must have gameModes");
         assertTrue(enums.has("knobs"), "Must have knobs");
         assertTrue(enums.has("inputs"), "Must have inputs");
-        assertTrue(enums.optJSONArray("pictureModes").length() == 5, "5 picture modes");
+        org.json.JSONArray picModes = enums.optJSONArray("pictureModes");
+        assertTrue(picModes.length() == 9, "9 picture modes");
         assertTrue(enums.optJSONArray("colorTemps").length() == 5, "5 color temps");
         assertTrue(enums.optJSONArray("gameModes").length() == 3, "3 game modes");
+
+        // Verify values and labels
+        java.util.Map<Integer, String> expectedModes = new java.util.LinkedHashMap<>();
+        expectedModes.put(8, "Standard");
+        expectedModes.put(1, "Movie");
+        expectedModes.put(0, "Vivid");
+        expectedModes.put(4, "Game");
+        expectedModes.put(9, "Sports");
+        expectedModes.put(6, "Office");
+        expectedModes.put(27, "Filmmaker Mode");
+        expectedModes.put(30, "ISF Day");
+        expectedModes.put(31, "ISF Night");
+
+        for (int i = 0; i < picModes.length(); i++) {
+            JSONObject pm = picModes.optJSONObject(i);
+            int v = pm.optInt("value");
+            String label = pm.optString("label");
+            assertTrue(expectedModes.containsKey(v), "Unexpected mode value: " + v);
+            assertTrue(expectedModes.get(v).equals(label), "Wrong label for mode " + v + ": " + label);
+        }
     }
 
     private static void assertTrue(boolean condition, String msg) {
@@ -59,12 +80,15 @@ public class SettingRulesTest {
     }
 
     private static void testPictureMode() {
-        for (int m : new int[]{1, 3, 4, 6, 9}) {
+        for (int m : new int[]{0, 1, 3, 4, 6, 8, 9, 27, 30, 31}) {
             assertTrue(SettingRules.ALLOWED_PICTURE_MODES.contains(m), "Mode " + m + " should be allowed");
         }
-        assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(0), "Mode 0 should not be allowed");
         assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(2), "Mode 2 should not be allowed");
         assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(5), "Mode 5 should not be allowed");
+        assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(7), "Mode 7 should not be allowed");
+        assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(14), "Mode 14 should not be allowed");
+        assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(28), "Mode 28 should not be allowed");
+        assertFalse(SettingRules.ALLOWED_PICTURE_MODES.contains(-1), "Mode -1 should not be allowed");
     }
 
     private static void testColorTemp() {

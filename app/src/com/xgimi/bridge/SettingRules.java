@@ -22,7 +22,7 @@ import java.util.Set;
  */
 public class SettingRules {
     public static final Set<Integer> ALLOWED_PICTURE_MODES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList(1, 3, 4, 6, 9)));
+            new HashSet<>(Arrays.asList(0, 1, 3, 4, 6, 8, 9, 27, 30, 31)));
 
     public static final Set<Integer> ALLOWED_COLOR_TEMPS = Collections.unmodifiableSet(
             new HashSet<>(Arrays.asList(0, 1, 2, 3, 4)));
@@ -43,11 +43,15 @@ public class SettingRules {
         JSONObject obj = new JSONObject();
         try {
             org.json.JSONArray picModes = new org.json.JSONArray();
+            picModes.put(new JSONObject().put("value", 8).put("label", "Standard"));
             picModes.put(new JSONObject().put("value", 1).put("label", "Movie"));
-            picModes.put(new JSONObject().put("value", 9).put("label", "Football"));
-            picModes.put(new JSONObject().put("value", 6).put("label", "Office"));
+            picModes.put(new JSONObject().put("value", 0).put("label", "Vivid"));
             picModes.put(new JSONObject().put("value", 4).put("label", "Game"));
-            picModes.put(new JSONObject().put("value", 3).put("label", "User"));
+            picModes.put(new JSONObject().put("value", 9).put("label", "Sports"));
+            picModes.put(new JSONObject().put("value", 6).put("label", "Office"));
+            picModes.put(new JSONObject().put("value", 27).put("label", "Filmmaker Mode"));
+            picModes.put(new JSONObject().put("value", 30).put("label", "ISF Day"));
+            picModes.put(new JSONObject().put("value", 31).put("label", "ISF Night"));
             obj.put("pictureModes", picModes);
 
             org.json.JSONArray colTemps = new org.json.JSONArray();

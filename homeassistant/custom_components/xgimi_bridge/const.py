@@ -27,11 +27,15 @@ INPUT_TO_API = {
 }
 
 PICTURE_MODES = {
+    8: "Standard",
     1: "Movie",
-    9: "Football",
-    6: "Office",
+    0: "Vivid",
     4: "Game",
-    3: "User",
+    9: "Sports",
+    6: "Office",
+    27: "Filmmaker Mode",
+    30: "ISF Day",
+    31: "ISF Night",
 }
 PICTURE_MODE_REV = {v: k for k, v in PICTURE_MODES.items()}
 

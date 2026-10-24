@@ -13,11 +13,15 @@ const KNOBS = KNOB_DEFINITIONS.filter((k) => k.key.startsWith("wb"));
 const PICTURE_ITEMS = KNOB_DEFINITIONS.filter((k) => !k.key.startsWith("wb"));
 
 const PICTURE_MODE_OPTIONS = [
+  { value: 8, label: "Standard" },
   { value: 1, label: "Movie" },
-  { value: 9, label: "Football" },
-  { value: 6, label: "Office" },
+  { value: 0, label: "Vivid" },
   { value: 4, label: "Game" },
-  { value: 3, label: "User" },
+  { value: 9, label: "Sports" },
+  { value: 6, label: "Office" },
+  { value: 27, label: "Filmmaker Mode" },
+  { value: 30, label: "ISF Day" },
+  { value: 31, label: "ISF Night" },
 ];
 const COLOR_TEMP_OPTIONS = [
   { value: 0, label: "System" },

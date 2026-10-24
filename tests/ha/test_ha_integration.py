@@ -494,6 +494,41 @@ class TestHaIntegration(unittest.IsolatedAsyncioTestCase):
         coordinator.data["picture"]["currentInputSource"] = "E_INPUT_SOURCE_HDMI1"
         self.assertEqual(input_sel.current_option, "HDMI 1")
 
+        # Picture mode select options and state derivation
+        pic_sel = XgimiPictureModeSelect(coordinator)
+        expected_options = [
+            "Standard", "Movie", "Vivid", "Game", "Sports", "Office",
+            "Filmmaker Mode", "ISF Day", "ISF Night"
+        ]
+        self.assertEqual(pic_sel.options, expected_options)
+
+        mode_mapping = {
+            8: "Standard",
+            1: "Movie",
+            0: "Vivid",
+            4: "Game",
+            9: "Sports",
+            6: "Office",
+            27: "Filmmaker Mode",
+            30: "ISF Day",
+            31: "ISF Night",
+        }
+        for raw_val, label in mode_mapping.items():
+            coordinator.data["picture"]["pictureMode"] = raw_val
+            self.assertEqual(pic_sel.current_option, label)
+
+        coordinator.data["picture"]["pictureMode"] = 999
+        self.assertIsNone(pic_sel.current_option)
+
+        # Successful selection dispatches correct integer value
+        coordinator.async_post_json = AsyncMock(return_value=True)
+        for label, val in [("Standard", 8), ("Vivid", 0), ("Filmmaker Mode", 27), ("ISF Day", 30), ("ISF Night", 31)]:
+            await pic_sel.async_select_option(label)
+            coordinator.async_post_json.assert_called_with("/api/picture/picture-mode", {"value": val})
+
+        with self.assertRaises(HomeAssistantError):
+            await pic_sel.async_select_option("InvalidMode")
+
         # Preset select derives state from coordinator
         preset_sel = XgimiPresetSelect(coordinator)
         coordinator.data["presets"] = [{"id": "p1", "name": "Cinema"}]

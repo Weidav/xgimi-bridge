@@ -60,11 +60,38 @@ public class ProjectorFormattersTest {
     }
 
     private static void testResolvePictureMode() {
+        // 1. Dolby Vision MTK strings override valid AIDL picture modes
         assertEquals("Dolby Vision Dark", ProjectorFormatters.resolvePictureMode(1, "DolbyVisionDark"), "mtk dv dark");
-        assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(1, "FilmMaker"), "mtk filmmaker");
+        assertEquals("Dolby Vision Bright", ProjectorFormatters.resolvePictureMode(8, "DolbyVisionBright"), "mtk dv bright");
+        assertEquals("Dolby Vision Game", ProjectorFormatters.resolvePictureMode(4, "DolbyVisionGame"), "mtk dv game");
+
+        // 2. Stale or non-DV MTK strings do NOT override valid AIDL picture modes
+        assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, "FilmMaker"), "aidl movie not overridden by mtk filmmaker");
+        assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, "ImaxEnhanced"), "aidl movie not overridden by mtk imax");
+        assertEquals("Standard (8)", ProjectorFormatters.resolvePictureMode(8, "User"), "aidl standard not overridden by mtk user");
+        assertEquals("Vivid (0)", ProjectorFormatters.resolvePictureMode(0, "Movie"), "aidl vivid not overridden by mtk movie");
+
+        // 3. Hardware-verified AIDL modes
+        assertEquals("Vivid (0)", ProjectorFormatters.resolvePictureMode(0, null), "aidl vivid");
         assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, null), "aidl movie");
-        assertEquals("Standard (0)", ProjectorFormatters.resolvePictureMode(0, null), "aidl standard");
         assertEquals("User / Custom (3)", ProjectorFormatters.resolvePictureMode(3, null), "aidl custom");
+        assertEquals("Game (4)", ProjectorFormatters.resolvePictureMode(4, null), "aidl game");
+        assertEquals("Office (6)", ProjectorFormatters.resolvePictureMode(6, null), "aidl office");
+        assertEquals("Standard (8)", ProjectorFormatters.resolvePictureMode(8, null), "aidl standard");
+        assertEquals("Sports (9)", ProjectorFormatters.resolvePictureMode(9, null), "aidl sports");
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(27, null), "aidl filmmaker");
+        assertEquals("ISF Day (30)", ProjectorFormatters.resolvePictureMode(30, null), "aidl isf day");
+        assertEquals("ISF Night (31)", ProjectorFormatters.resolvePictureMode(31, null), "aidl isf night");
+        assertEquals("Mode 99", ProjectorFormatters.resolvePictureMode(99, null), "aidl unmapped mode");
+
+        // 4. Fallback to MTK when aidlPicMode < 0
+        assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(-1, "FilmMaker"), "mtk filmmaker fallback");
+        assertEquals("IMAX Enhanced", ProjectorFormatters.resolvePictureMode(-1, "ImaxEnhanced"), "mtk imax fallback");
+        assertEquals("ISF Day", ProjectorFormatters.resolvePictureMode(-1, "User"), "mtk user mapped to isf day");
+        assertEquals("ISF Night", ProjectorFormatters.resolvePictureMode(-1, "Energy Saving"), "mtk energy saving mapped to isf night");
+        assertEquals("ISF Night", ProjectorFormatters.resolvePictureMode(-1, "EnergySaving"), "mtk energysaving mapped to isf night");
+        assertEquals(null, ProjectorFormatters.resolvePictureMode(-1, null), "both null/negative");
+        assertEquals(null, ProjectorFormatters.resolvePictureMode(-1, ""), "empty mtk mode fallback");
     }
 
     private static void testFormatLuminanceMode() {

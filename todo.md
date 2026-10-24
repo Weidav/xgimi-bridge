@@ -21,3 +21,6 @@ These pass through `injectInputEvent` and Xgimi's `PhoneWindowManager` intercept
 - [ ] **Simplify Home Assistant Integration**:
   - Restructure and reduce the HA integration scope to only handle Wake-on-LAN (WOL) and projector power state verification (online/offline check).
   - Rely on the native Home Assistant Android TV integration for all navigation, media playback, volume, and remote control capabilities.
+
+- [ ] Gemini said "I have decompiled and extracted the exact picture mode enum definitions directly from the projector's system framework (GmDisplayManager in
+  XgimiTvSettingsPartner.apk & XgimiTvSettingsVendor.apk)." can you check other things as well this way? so i dont have to manually check everything else that the "stats for nerds" deliver.

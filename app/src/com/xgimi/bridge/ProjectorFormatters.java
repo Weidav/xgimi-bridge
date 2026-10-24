@@ -3,6 +3,7 @@ package com.xgimi.bridge;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -65,16 +66,16 @@ public class ProjectorFormatters {
 
     private static final Map<Integer, String> PICTURE_MODES = new HashMap<>();
     static {
-        PICTURE_MODES.put(0, "Standard (0)");
+        PICTURE_MODES.put(0, "Vivid (0)");
         PICTURE_MODES.put(1, "Movie (1)");
-        PICTURE_MODES.put(2, "Vivid / Highlight (2)");
         PICTURE_MODES.put(3, "User / Custom (3)");
         PICTURE_MODES.put(4, "Game (4)");
-        PICTURE_MODES.put(5, "Monitor (5)");
         PICTURE_MODES.put(6, "Office (6)");
-        PICTURE_MODES.put(9, "Football / Sport (9)");
-        PICTURE_MODES.put(14, "Filmmaker Mode (14)");
-        PICTURE_MODES.put(18, "IMAX Enhanced (18)");
+        PICTURE_MODES.put(8, "Standard (8)");
+        PICTURE_MODES.put(9, "Sports (9)");
+        PICTURE_MODES.put(27, "Filmmaker Mode (27)");
+        PICTURE_MODES.put(30, "ISF Day (30)");
+        PICTURE_MODES.put(31, "ISF Night (31)");
     }
 
     private static final Map<Integer, String> COLOR_SPACES = new HashMap<>();
@@ -172,10 +173,16 @@ public class ProjectorFormatters {
     }
 
     public static String resolvePictureMode(int aidlPicMode, String mtkPicMode) {
+        if (mtkPicMode != null && mtkPicMode.trim().toLowerCase(Locale.ROOT).startsWith("dolbyvision")) {
+            return formatMtkPictureMode(mtkPicMode);
+        }
+        if (aidlPicMode >= 0) {
+            return formatPictureMode(aidlPicMode);
+        }
         if (mtkPicMode != null && !mtkPicMode.trim().isEmpty()) {
             return formatMtkPictureMode(mtkPicMode);
         }
-        return formatPictureMode(aidlPicMode);
+        return null;
     }
 
     public static String formatMtkPictureMode(String mode) {
@@ -186,16 +193,18 @@ public class ProjectorFormatters {
         if ("DolbyVisionGame".equalsIgnoreCase(mode)) return "Dolby Vision Game";
         if ("DolbyVisionIQ".equalsIgnoreCase(mode)) return "Dolby Vision IQ";
         if ("DolbyVisionCustom".equalsIgnoreCase(mode)) return "Dolby Vision Custom";
+        if ("DolbyVision".equalsIgnoreCase(mode)) return "Dolby Vision";
         if ("FilmMaker".equalsIgnoreCase(mode)) return "Filmmaker Mode";
         if ("ImaxEnhanced".equalsIgnoreCase(mode)) return "IMAX Enhanced";
         if ("Standard".equalsIgnoreCase(mode)) return "Standard";
         if ("Movie".equalsIgnoreCase(mode)) return "Movie";
-        if ("Sport".equalsIgnoreCase(mode)) return "Sport";
+        if ("Sport".equalsIgnoreCase(mode) || "Sports".equalsIgnoreCase(mode)) return "Sports";
         if ("Vivid".equalsIgnoreCase(mode)) return "Vivid";
         if ("Game".equalsIgnoreCase(mode)) return "Game";
         if ("Monitor".equalsIgnoreCase(mode)) return "Monitor";
         if ("Office".equalsIgnoreCase(mode)) return "Office";
-        if ("User".equalsIgnoreCase(mode)) return "Custom / User";
+        if ("User".equalsIgnoreCase(mode)) return "ISF Day";
+        if ("Energy Saving".equalsIgnoreCase(mode) || "EnergySaving".equalsIgnoreCase(mode)) return "ISF Night";
         return mode;
     }
 

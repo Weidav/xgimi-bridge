@@ -14,6 +14,7 @@ public class ProjectorCategoryBuilderTest {
         testDisplayCategory();
         testHdrResolution();
         testCecTopologySummary();
+        testPictureModeResolution();
         System.out.println("  [PASS] ProjectorCategoryBuilderTest");
     }
 
@@ -156,5 +157,60 @@ public class ProjectorCategoryBuilderTest {
         JSONObject catCec = res.categories.getJSONObject("hdmi_cec");
         String summary = catCec.getString("connectedCecSummary");
         assertTrue(summary.contains("Apple TV (Port 1, 0x1000, On)"), "CEC summary format");
+    }
+
+    private static void testPictureModeResolution() throws Exception {
+        File tmp = new File(System.getProperty("java.io.tmpdir"));
+        Context ctx = new Context(tmp);
+
+        // Case 1: AIDL standard (8) with stale MTK "ImaxEnhanced" -> AIDL wins: "Standard (8)"
+        JSONObject aidl1 = new JSONObject();
+        aidl1.put("pictureMode", 8);
+        JSONObject mtk1 = new JSONObject();
+        JSONObject s1 = new JSONObject();
+        s1.put("Picture_Mode", "ImaxEnhanced");
+        mtk1.put("settings", s1);
+        ProjectorCategoryBuilder.CategorizedResult res1 = ProjectorCategoryBuilder.build(
+                ctx, aidl1, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk1);
+        assertEquals("Standard (8)", res1.summary.optString("pictureMode"), "Summary pictureMode: aidl standard");
+        assertEquals("Standard (8)", res1.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: aidl standard");
+
+        // Case 2: AIDL movie (1) with active MTK "DolbyVisionBright" -> MTK DV wins: "Dolby Vision Bright"
+        JSONObject aidl2 = new JSONObject();
+        aidl2.put("pictureMode", 1);
+        JSONObject mtk2 = new JSONObject();
+        JSONObject s2 = new JSONObject();
+        s2.put("Picture_Mode", "DolbyVisionBright");
+        mtk2.put("settings", s2);
+        ProjectorCategoryBuilder.CategorizedResult res2 = ProjectorCategoryBuilder.build(
+                ctx, aidl2, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk2);
+        assertEquals("Dolby Vision Bright", res2.summary.optString("pictureMode"), "Summary pictureMode: DV override");
+        assertEquals("Dolby Vision Bright", res2.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: DV override");
+
+        // Case 3: AIDL missing (-1) with MTK "User" -> mapped to "ISF Day"
+        JSONObject aidl3 = new JSONObject();
+        JSONObject mtk3 = new JSONObject();
+        JSONObject s3 = new JSONObject();
+        s3.put("Picture_Mode", "User");
+        mtk3.put("settings", s3);
+        ProjectorCategoryBuilder.CategorizedResult res3 = ProjectorCategoryBuilder.build(
+                ctx, aidl3, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk3);
+        assertEquals("ISF Day", res3.summary.optString("pictureMode"), "Summary pictureMode: MTK User to ISF Day");
+        assertEquals("ISF Day", res3.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: MTK User to ISF Day");
+
+        // Case 4: AIDL missing (-1) with MTK "Energy Saving" -> mapped to "ISF Night"
+        JSONObject aidl4 = new JSONObject();
+        JSONObject mtk4 = new JSONObject();
+        JSONObject s4 = new JSONObject();
+        s4.put("Picture_Mode", "Energy Saving");
+        mtk4.put("settings", s4);
+        ProjectorCategoryBuilder.CategorizedResult res4 = ProjectorCategoryBuilder.build(
+                ctx, aidl4, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk4);
+        assertEquals("ISF Night", res4.summary.optString("pictureMode"), "Summary pictureMode: MTK Energy Saving to ISF Night");
+        assertEquals("ISF Night", res4.categories.getJSONObject("brightness_picture").optString("pictureMode"), "Category pictureMode: MTK Energy Saving to ISF Night");
     }
 }

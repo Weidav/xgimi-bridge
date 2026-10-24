@@ -11,7 +11,7 @@ This document tracks findings, architectural flaws, bugs, duplicate code, and ba
 > The core server hardening, Home Assistant options flow fix, AtomicFile preset store, and web transport layers have passed all automated JVM, Home Assistant, Web, and tooling regression tests. The following items require verification on **physical hardware** (projector and Home Assistant instance):
 
 ### 1. Physical Projector Deployment & Lifecycle
-- [ ] **APK Installation & Upgrade**:
+- [x] **APK Installation & Upgrade**:
   - Deploy the compiled APK (`app/build/bridge.apk`) using `./app/install.sh [projector-ip]`.
   - Confirm upgrade succeeds without needing to uninstall first, preserving existing `presets.json` and ADB key pair (`bridge_adb.key`).
 - [ ] **Background Persistence & Autostart**:
@@ -26,6 +26,10 @@ This document tracks findings, architectural flaws, bugs, duplicate code, and ba
   - Adjust white balance gains (`wbRed`, `wbGreen`, `wbBlue`) and confirm color temperature changes.
 - [ ] **Mode & Input Switching**:
   - Switch picture modes (`Standard`, `Movie`, `Game`, `Custom`) and color temperatures (`Standard`, `Warm`, `Cool`).
+  - - [x] in SDR
+  - - [ ] in HDR
+  - - [ ] inHGL
+  - - [ ] in DV
   - Switch input sources between internal storage/apps and HDMI ports. Confirm HDMI TvView pipeline switches cleanly without hanging.
 - [ ] **Validation Boundary Checks**:
   - Attempt an invalid setting write via HTTP (e.g. `POST /api/picture/brightness` with `{"value": 150}` or `{"value": -5}`).
@@ -192,6 +196,3 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 **All actionable codebase audit findings across Sections 1, 2, and 3 have been completely addressed, resolved, and verified.**
 
 No unaddressed software flaws remain in the codebase. All automated regression suites pass cleanly (JVM Core Engine: 14 suites, Home Assistant: 13 tests, Web Frontend: 9 tests, Tooling: 7 tests). Only the physical hardware checklist items (under `## TODO: Physical Deployment & Hardware Verification Checklist` above) await user execution on the physical projector device.
-
-
-
