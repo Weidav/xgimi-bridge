@@ -75,6 +75,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.2** | Unsynchronized Check in `LocalAdbClient.warmUpAsync()` | Synchronized socket checks under `dispatcherLock` in `LocalAdbClient`. |
 | **1.3** | Presets Inefficient Parsing & Recursive Sanitization Loop | Completely rewritten `PresetStore` using `AtomicFile`, memory-efficient reads, quotas, no recursive loops. |
 | **1.4** | Blocking Sleep on HTTP Worker Pool Threads | Serialized mutations in `DeviceCommands` with non-blocking `tryLock(250ms)` returning HTTP 503 if busy. |
+| **1.5 / 3.38** | Offline Remote Dependency on External Google Fonts | Self-hosted Silkscreen WOFF2 font files locally in `web/public/fonts/` and `web/src/fonts/`, loaded via `@font-face` in `index.css`; removed external Google Fonts links. |
 | **1.6** | Hardcoded Private Developer IP in Home Assistant Component | Removed hardcoded IP default in `const.py` / `config_flow.py`. |
 | **1.7** | Home Assistant options flow crash on modern HA | Removed invalid `__init__(config_entry)` override; uses inherited property per HA guidelines. |
 | **1.8** | "Copy JSON" silently failed on plain HTTP LAN origins | Added fallback `<textarea>` + `execCommand("copy")` in `App.jsx` and `user-select: text` on `.info-raw-pre`. |
@@ -136,15 +137,6 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 The following items were identified during the codebase audit and remain unaddressed. They are preserved here for future refactoring, optimization, and code hygiene tasks.
 
 ### Section 1: Runtime & Environment Flaws
-
-#### 1.5 / 3.38 Offline Remote Dependency on External Google Fonts
-- **File**: [`web/index.html`](file:///workspaces/xgimi-bridge/web/index.html#L14-L16)
-- **Flaw**: Loads the `Silkscreen` Google Font over the public internet:
-  ```html
-  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
-  ```
-- **Impact**: On an isolated LAN without internet access, font loading blocks or delays styling of the OLED display component.
-- **Future Check**: Self-host the WOFF2 font files in `web/public/` or fall back to system monospace font.
 
 #### 1.17 `KeyDispatcher` Telemetry Caches Are Unsynchronized Statics
 - **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java)
