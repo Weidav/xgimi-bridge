@@ -160,6 +160,7 @@ The following items from the original audit were addressed and resolved followin
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 | **3.12** | `HttpServer` is a Router with Inline Business Logic | Extracted TV input reflection and channel intent switching into `InputService`, implemented `Map<String, RouteHandler>` exact route map and prefix route dispatching table in `HttpServer`. |
 | **3.3** | `KeyDispatcher` Multi-Responsibility Monolith | Extracted shell hardware telemetry and dumpsys HDMI CEC parsing into `ShellTelemetryCollector`, isolating `KeyDispatcher` to input event injection and wake server. |
+| **3.2** | `ProjectorInfoCollector` 1,374-Line God Class | Decomposed 1,374-line monolith into `FrameworkInfoCollector` (Android TV APIs), `ProjectorFormatters` (enum tables/resolvers), and `ProjectorCategoryBuilder` (categorized telemetry & summary), reducing `ProjectorInfoCollector` to ~70 lines with full unit test coverage. |
 
 
 ---
@@ -193,11 +194,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 
 ### Section 3: Over-Engineered Architecture & Single-Use Micro-Functions
-
-#### 3.2 `ProjectorInfoCollector` 1,374-Line God Class
-- **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java)
-- **Issue**: One static class handles display, audio, optics, thermal, CEC, system properties, and MediaTek PQ AIDL calls.
-- **Future Check**: Split into modular domain collectors under `com.xgimi.bridge.collector.*` (DisplayCollector, AudioCollector, ThermalCollector, etc.).
 
 #### 3.4 `MiniHttp` is a Hand-Rolled HTTP Server with Unused Features
 - **File**: [`app/src/com/xgimi/bridge/MiniHttp.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/MiniHttp.java)
