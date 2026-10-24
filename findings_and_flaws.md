@@ -107,6 +107,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.3** | Duplicate JSON String Escaping & Error Formatting | Replaced duplicated custom string escaping loops with `JSONObject.quote()` across `MiniHttp` and `HttpServer`. |
 | **2.4** | Duplicate Running Application Lookups | Consolidated `sys.mtk.running.application` and `running_package_name` lookups into a unified `DeviceState.getRunningApp(Context)`. |
 | **2.5** | CSS Split Rules, Dead Selectors, and Inconsistent Tokens | Removed dead `.state` selector, bound `--bg` token to `html`/`body`, consolidated duplicate `.btn` declarations with hover transitions. |
+| **2.6** | Dead Code in React Icons | Removed unrendered `PowerIcon()` SVG component from `web/src/App.jsx`. |
 | **2.12** | Awake / Interactive Logic Duplication | Consolidated `PowerManager.isInteractive()` checks into `DeviceState.isAwake(Context)`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
@@ -149,11 +150,6 @@ The following items were identified during the codebase audit and remain unaddre
 ---
 
 ### Section 2: Code Duplication & Shared Code Opportunities
-
-#### 2.6 Dead Code in React Icons
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: `PowerIcon()` is declared with SVG paths but never rendered anywhere in the component tree (`PowerDotIcon()` is used instead).
-- **Future Check**: Remove `PowerIcon()`.
 
 #### 2.7 / 2.9 Cross-Language Picture & Mode Option Duplication
 - **Files**:
