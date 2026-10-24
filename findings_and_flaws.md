@@ -117,6 +117,8 @@ The following items from the original audit were addressed and resolved followin
 | **2.18** | Home Assistant Button Class Duplication | Consolidated identical `async_press` execution and error handling into `XgimiActionButton` base class. |
 | **2.20** | HDMI Input Reflection Duplication | Extracted `TvInputInfo` HDMI reflection into dedicated `HdmiInputHelper` utility. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
+| **2.22** | `App.jsx` Input Source Mapping Duplication | Unified input source mapping with dynamic `inputToAidlSource` helper. |
+| **2.23** | `App.jsx` `epToField` Duplicates `KNOBS` / `PICTURE_ITEMS` | Centralized unified `KNOB_DEFINITIONS` in `api.js` and derived `KNOBS`, `PICTURE_ITEMS`, and `epToField` dynamically. |
 | **2.25** | `MiniHttp` Request/Response Redundant Getters | Removed redundant getters on `Request` and `Response` with already `public final` fields. |
 | **2.26** | `AidlClient` Standardized Transaction Pattern | Unified `AidlClient` read queries through null-safe query methods and mutation through throwing methods. |
 | **2.28** | Dead-Code Inventory | Pruned `readSysFsViaAidl`, `TX_SET_GAME_MODE_OPTION_FOR_SOURCE`, `sendKey(keyCode)` wrapper alias, and unused `isInternalStorage` parameter in `resolvePictureMode`. |
@@ -190,15 +192,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 
 
-#### 2.22 `App.jsx` Input Source Mapping Duplication
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: `switchInput()` maps `STORAGE/HDMI1/HDMI2/HDMI3` locally instead of reading supported inputs from server.
-- **Future Check**: Use server-provided input definitions.
-
-#### 2.23 `App.jsx` `epToField` Duplicates `KNOBS` / `PICTURE_ITEMS`
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: The endpoint → state-key mapping in `epToField` is a third redundant representation of the knob list.
-- **Future Check**: Derive dynamically from unified knob configuration.
 
 
 

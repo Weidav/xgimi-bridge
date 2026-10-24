@@ -1,18 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
-const KNOBS = [
-  { key: "wbRed", ep: "wb-red", label: "Red gain", accent: "#ff453a" },
-  { key: "wbGreen", ep: "wb-green", label: "Green gain", accent: "#30d158" },
-  { key: "wbBlue", ep: "wb-blue", label: "Blue gain", accent: "#0a84ff" },
-];
+import { api, extractWritableValues, epToField, formatAppName, sourceTitle, KNOB_DEFINITIONS, inputToAidlSource } from "./api.js";
 
-const PICTURE_ITEMS = [
-  { key: "brightness", ep: "brightness", label: "Brightness", accent: "#f5f5f7" },
-  { key: "contrast", ep: "contrast", label: "Contrast", accent: "#f5f5f7" },
-  { key: "saturation", ep: "saturation", label: "Saturation", accent: "#f5f5f7" },
-  { key: "sharpness", ep: "sharpness", label: "Sharpness", accent: "#f5f5f7" },
-  { key: "hue", ep: "hue", label: "Hue", accent: "#f5f5f7" },
-];
+const KNOBS = KNOB_DEFINITIONS.filter((k) => k.key.startsWith("wb"));
+const PICTURE_ITEMS = KNOB_DEFINITIONS.filter((k) => !k.key.startsWith("wb"));
 
 const PICTURE_MODE_OPTIONS = [
   { value: 1, label: "Movie" },
@@ -33,8 +24,6 @@ const GAME_MODE_OPTIONS = [
   { value: 1, label: "Standard" },
   { value: 2, label: "Boost" },
 ];
-
-import { api, extractWritableValues, epToField, formatAppName, sourceTitle } from "./api.js";
 
 function PinIcon() {
   return (
@@ -428,11 +417,7 @@ export default function App() {
       if (r === null) { setBusy(false); return; }
       // The AIDL `currentInputSource` lags (HDMI switch updates it; the Apps path just fires a
       // launcher intent and xgimiservice doesn't notice). Optimistically reflect the user's pick.
-      const aidlSource = to === "STORAGE" ? "E_INPUT_SOURCE_STORAGE"
-        : to === "HDMI1" ? "E_INPUT_SOURCE_HDMI1"
-          : to === "HDMI2" ? "E_INPUT_SOURCE_HDMI2"
-            : to === "HDMI3" ? "E_INPUT_SOURCE_HDMI3"
-              : null;
+      const aidlSource = inputToAidlSource(to);
       // Then re-fetch picture (per-source picture-mode/colorTemp may differ); merge so the
       // optimistic source isn't clobbered if AIDL hasn't caught up yet.
       try {

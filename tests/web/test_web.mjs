@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS, formatAppName, sourceTitle } from "../../web/src/api.js";
+import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS, formatAppName, sourceTitle, epToField, inputToAidlSource } from "../../web/src/api.js";
 
 test("extractWritableValues filters out read-only and non-numeric fields", () => {
   const fullPicture = {
@@ -126,4 +126,27 @@ test("sourceTitle resolves running app name on Android TV and CEC labels on HDMI
 
   const picHdmi2 = { currentInputSource: "E_INPUT_SOURCE_HDMI2" };
   assert.equal(sourceTitle(picHdmi2, inputs), "HDMI 2");
+});
+
+test("epToField maps knob endpoints to state fields dynamically", () => {
+  assert.equal(epToField("brightness"), "brightness");
+  assert.equal(epToField("contrast"), "contrast");
+  assert.equal(epToField("wb-red"), "wbRed");
+  assert.equal(epToField("wb-green"), "wbGreen");
+  assert.equal(epToField("wb-blue"), "wbBlue");
+  assert.equal(epToField("color-temp"), "colorTemp");
+  assert.equal(epToField("picture-mode"), "pictureMode");
+  assert.equal(epToField("game-mode"), "gameMode");
+  assert.equal(epToField("invalid"), null);
+});
+
+test("inputToAidlSource resolves inputs to canonical AIDL sources", () => {
+  assert.equal(inputToAidlSource("STORAGE"), "E_INPUT_SOURCE_STORAGE");
+  assert.equal(inputToAidlSource("home"), "E_INPUT_SOURCE_STORAGE");
+  assert.equal(inputToAidlSource("apps"), "E_INPUT_SOURCE_STORAGE");
+  assert.equal(inputToAidlSource("HDMI1"), "E_INPUT_SOURCE_HDMI1");
+  assert.equal(inputToAidlSource("hdmi2"), "E_INPUT_SOURCE_HDMI2");
+  assert.equal(inputToAidlSource("HDMI3"), "E_INPUT_SOURCE_HDMI3");
+  assert.equal(inputToAidlSource(null), null);
+  assert.equal(inputToAidlSource(""), null);
 });

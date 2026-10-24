@@ -2,10 +2,25 @@
  * Client transport wrapper and picture setting validation utilities.
  */
 
+export const KNOB_DEFINITIONS = [
+  { key: "brightness", ep: "brightness", label: "Brightness", accent: "#f5f5f7" },
+  { key: "contrast", ep: "contrast", label: "Contrast", accent: "#f5f5f7" },
+  { key: "saturation", ep: "saturation", label: "Saturation", accent: "#f5f5f7" },
+  { key: "sharpness", ep: "sharpness", label: "Sharpness", accent: "#f5f5f7" },
+  { key: "hue", ep: "hue", label: "Hue", accent: "#f5f5f7" },
+  { key: "wbRed", ep: "wb-red", label: "Red gain", accent: "#ff453a" },
+  { key: "wbGreen", ep: "wb-green", label: "Green gain", accent: "#30d158" },
+  { key: "wbBlue", ep: "wb-blue", label: "Blue gain", accent: "#0a84ff" },
+];
+
+const EP_TO_FIELD_MAP = Object.fromEntries(KNOB_DEFINITIONS.map((k) => [k.ep, k.key]));
+EP_TO_FIELD_MAP["color-temp"] = "colorTemp";
+EP_TO_FIELD_MAP["picture-mode"] = "pictureMode";
+EP_TO_FIELD_MAP["game-mode"] = "gameMode";
+
 export const WRITABLE_PICTURE_FIELDS = [
-  "wbRed", "wbGreen", "wbBlue",
-  "colorTemp", "pictureMode", "gameMode",
-  "brightness", "contrast", "saturation", "sharpness", "hue"
+  ...KNOB_DEFINITIONS.map((k) => k.key),
+  "colorTemp", "pictureMode", "gameMode"
 ];
 
 export function extractWritableValues(pic) {
@@ -43,20 +58,19 @@ export async function api(path, opts = {}, fetchFn = globalThis.fetch) {
 }
 
 export function epToField(ep) {
-  switch (ep) {
-    case "wb-red": return "wbRed";
-    case "wb-green": return "wbGreen";
-    case "wb-blue": return "wbBlue";
-    case "color-temp": return "colorTemp";
-    case "picture-mode": return "pictureMode";
-    case "game-mode": return "gameMode";
-    case "brightness": return "brightness";
-    case "contrast": return "contrast";
-    case "saturation": return "saturation";
-    case "sharpness": return "sharpness";
-    case "hue": return "hue";
-    default: return null;
+  return EP_TO_FIELD_MAP[ep] || null;
+}
+
+export function inputToAidlSource(to) {
+  if (!to || typeof to !== "string") return null;
+  const upper = to.trim().toUpperCase();
+  if (upper === "STORAGE" || upper === "HOME" || upper === "APPS") {
+    return "E_INPUT_SOURCE_STORAGE";
   }
+  if (upper.startsWith("HDMI")) {
+    return `E_INPUT_SOURCE_${upper}`;
+  }
+  return null;
 }
 
 export function formatAppName(pkg) {
