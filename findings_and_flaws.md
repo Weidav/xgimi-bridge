@@ -113,6 +113,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.14** | `put` / `putSafe` Duplicated | Consolidated JSON object putters with type sanitization into `JsonUtils.putSafe()` across `KeyDispatcher` and `ProjectorInfoCollector`. |
 | **2.15** | Binder Reflection Helpers Duplication | Centralized Parcel obtain/transact/recycle boilerplate into `BinderTransact` utility and simplified `AidlClient`. |
 | **2.16** | `LocalAdbClient` Retry Boilerplate | Parameterized retry loop across key/text injection and hardware query into `withDispatcherRetry(DispatcherAction)`. |
+| **2.17 / 3.16** | Formatter Called Twice / Recomputing Category Values | Reused precomputed audio/earc formatters and category values (`hdrStatus`, `luminancePowerMode`, `pictureMode`, `activeOutputDevice`, `digitalOutputPassThroughFormat`) in `summary` block in `ProjectorInfoCollector`. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
@@ -180,10 +181,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 
 
-#### 2.17 / 3.16 Formatter Called Twice During Telemetry Collection / Recomputing Category Values
-- **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java)
-- **Issue**: `formatDigitalAudioFormat` and `formatEarcStatus` recomputed for both category and summary; summary block re-derives `luminanceModeLabel`, `picModeLabel`, `audioOutLabel`, and `hdrLabel` instead of reading back from category objects.
-- **Future Check**: Reuse computed category values when building the summary object.
 
 #### 2.18 Home Assistant Button Class Duplication
 - **File**: [`homeassistant/custom_components/xgimi_bridge/button.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/button.py)

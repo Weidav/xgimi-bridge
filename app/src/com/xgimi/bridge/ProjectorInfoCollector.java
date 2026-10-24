@@ -338,7 +338,8 @@ public class ProjectorInfoCollector {
             int gmpfSpdifType = gAud != null ? gAud.optInt("spdifType", -1) : -1;
             int spdifSetting = settingsJson.optInt("system.spdif_mode", -1);
 
-            put(catAudio, "digitalOutputPassThroughFormat", formatDigitalAudioFormat(digOutFmtProp, aidlDataFmt, gmpfArcType));
+            String digitalAudioFormatLabel = formatDigitalAudioFormat(digOutFmtProp, aidlDataFmt, gmpfArcType);
+            put(catAudio, "digitalOutputPassThroughFormat", digitalAudioFormatLabel);
             put(catAudio, "rawDigitalOutputProperty", digOutFmtProp);
             put(catAudio, "arcOutputFormat", formatArcType(gmpfArcType));
             put(catAudio, "spdifOutputFormat", formatSpdifType(gmpfSpdifType, spdifSetting));
@@ -347,8 +348,9 @@ public class ProjectorInfoCollector {
             int earcTv = gTv != null ? gTv.optInt("earcStatus", -1) : -1;
             int earcStatus = earcDumpsys > 0 ? earcDumpsys : earcTv;
             boolean earcEnabled = (gTv != null && gTv.optBoolean("earcEnableState", false)) || earcStatus == 3;
+            String earcHandshakeLabel = formatEarcStatus(earcStatus);
             put(catAudio, "earcEnabled", earcEnabled);
-            put(catAudio, "earcHandshakeStatus", formatEarcStatus(earcStatus));
+            put(catAudio, "earcHandshakeStatus", earcHandshakeLabel);
             put(catAudio, "externalSurroundSoundEnabled", settingsJson.optInt("global.nrdp_external_surround_sound_enabled", 0) == 1);
 
             int soundEffect = gAud != null ? gAud.optInt("soundEffect", -1) : aidlJson.optInt("soundMode", -1);
@@ -533,7 +535,8 @@ public class ProjectorInfoCollector {
             }
             if (gCec != null) {
                 put(catCec, "earcLocalRole", gCec.optString("earcLocalRole", null));
-                put(catCec, "earcHandshakeState", formatEarcStatus(gCec.optInt("earcDumpsysStatus", -1)));
+                int cecEarc = gCec.optInt("earcDumpsysStatus", -1);
+                put(catCec, "earcHandshakeState", cecEarc == earcStatus ? earcHandshakeLabel : formatEarcStatus(cecEarc));
                 JSONArray ports = gCec.optJSONArray("ports");
                 if (ports != null) put(catCec, "hdmiPorts", ports);
                 JSONArray devices = gCec.optJSONArray("devices");
@@ -600,14 +603,15 @@ public class ProjectorInfoCollector {
             categories.put("system", catSystem);
 
             // --- Quick Summary Bar ---
-            put(summary, "deviceName", marketingName);
+            put(summary, "deviceName", catSystem.optString("deviceName", marketingName));
             put(summary, "inputSource", inputLabel);
             put(summary, "resolution", signalRes != null ? signalRes : activeDisplayMode);
-            put(summary, "hdrStatus", hdrLabel);
-            put(summary, "brightnessMode", luminanceModeLabel + (dlpLumensLvl > 0 ? " • Lvl " + dlpLumensLvl + "/10" : ""));
-            put(summary, "pictureMode", picModeLabel);
-            put(summary, "audioOutput", audioOutLabel);
-            put(summary, "digitalAudioFormat", formatDigitalAudioFormat(digOutFmtProp, aidlDataFmt, gmpfArcType));
+            put(summary, "hdrStatus", catDisplay.optString("hdrStatus", hdrLabel));
+            put(summary, "brightnessMode", catBrightness.optString("luminancePowerMode", luminanceModeLabel)
+                    + (dlpLumensLvl > 0 ? " • Lvl " + dlpLumensLvl + "/10" : ""));
+            put(summary, "pictureMode", catBrightness.optString("pictureMode", picModeLabel));
+            put(summary, "audioOutput", catAudio.optString("activeOutputDevice", audioOutLabel));
+            put(summary, "digitalAudioFormat", catAudio.optString("digitalOutputPassThroughFormat", digitalAudioFormatLabel));
             put(summary, "systemTempC", sysTempC >= 0 ? sysTempC : null);
             put(summary, "ledOn", ledOn);
 
