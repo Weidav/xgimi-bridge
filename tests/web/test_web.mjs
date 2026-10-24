@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { api, extractWritableValues, WRITABLE_PICTURE_FIELDS, formatAppName, sourceTitle, epToField, inputToAidlSource } from "../../web/src/api.js";
+import { formatInfoValue } from "../../web/src/constants/infoSections.js";
 
 test("extractWritableValues filters out read-only and non-numeric fields", () => {
   const fullPicture = {
@@ -150,3 +151,20 @@ test("inputToAidlSource resolves inputs to canonical AIDL sources", () => {
   assert.equal(inputToAidlSource(null), null);
   assert.equal(inputToAidlSource(""), null);
 });
+
+test("formatInfoValue formats booleans, arrays, and nested telemetry objects cleanly", () => {
+  assert.equal(formatInfoValue(null), null);
+  assert.equal(formatInfoValue(undefined), null);
+  assert.equal(formatInfoValue(""), null);
+  assert.equal(formatInfoValue(true), "Yes");
+  assert.equal(formatInfoValue(false), "No");
+  assert.equal(formatInfoValue("Standard"), "Standard");
+  assert.equal(formatInfoValue(42), "42");
+  assert.equal(formatInfoValue(["HDR10", "Dolby Vision"]), "HDR10, Dolby Vision");
+  assert.equal(formatInfoValue({ red: 50, blue: 60 }), "red: 50, blue: 60");
+  assert.equal(
+    formatInfoValue([{ index: 0, rpm: 1800 }, { index: 1, rpm: 2100 }]),
+    "index: 0, rpm: 1800 | index: 1, rpm: 2100"
+  );
+});
+

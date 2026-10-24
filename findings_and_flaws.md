@@ -147,8 +147,12 @@ The following items from the original audit were addressed and resolved followin
 | **3.40** | Package Name and Job ID Duplication | Dynamically parse package name from `AndroidManifest.xml` and Job ID from `BridgeJobService.java` in `install.sh`. |
 | **3.14** | `BridgeJobService` Periodic Re-arming | Check `BridgeService.isRunning` state before attempting to start the service to prevent redundant startup calls. |
 | **3.17** | `KeyDispatcher` Sensor Probing | Cached sensor (12 indices) and fan (4 indices) telemetry for 5 seconds under `TELEMETRY_CACHE_LOCK` to reduce IPC overhead. |
+| **3.7** | `SourceSheet` Redundant Telemetry Fetches | Removed redundant fallback `/api/info` fetch on mount and rely solely on parent state. |
+| **3.8** | `InfoSheet` Polling Frequency | Throttled live polling frequency from 3s to 10s to reduce reflective binder load and dumpsys execution. |
 | **3.18** | `MiniHttp` Thread Pool Sizing | Replaced unbounded SynchronousQueue bursts with a bounded LinkedBlockingQueue and `allowCoreThreadTimeOut(true)`. |
 | **3.19** | `MiniHttp` `Response.Status` Machinery | Pruned unused HTTP status `GATEWAY_TIMEOUT` and dead helper methods `getRequestStatus()` and `getDescription()`. |
+| **3.20** | `App.jsx` `INFO_SECTIONS` Table Size | Extracted 220+ line telemetry metadata table into dedicated `web/src/constants/infoSections.js` module. |
+| **3.21** | `App.jsx` `formatInfoValue` Value Formatting | Cleanly format nested telemetry objects and object arrays with key-value pairs rather than raw JSON strings. |
 | **3.41** | `README.md` Build Step Documentation | Clarified dedicated web-only rebuild step `npm --prefix web run build` under Step-by-step. |
 
 
@@ -214,16 +218,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: ~110 lines implementing shared `AbortController`, single-flight semaphore, pending-key slot, and circuit breaker to work around iOS Safari parked fetch replays.
 - **Future Check**: Extract to a dedicated tested custom hook (`useLiveRequests`) with a clean finite state machine.
 
-#### 3.7 `SourceSheet` Redundant Telemetry Fetches
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: Fetches `/api/info` on mount if `runningApp` is empty, even though parent component periodically polls `/api/state`.
-- **Future Check**: Rely solely on parent state.
-
-#### 3.8 `InfoSheet` 3-Second Live Polling
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: Polling full `/api/info` every 3 seconds executes ~60 reflective binder calls and dumpsys subprocesses.
-- **Future Check**: Throttle live polling interval to 10 seconds or add section filtering (`/api/info?section=thermal`).
-
 #### 3.12 `HttpServer` is a Router with Inline Business Logic
 - **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java)
 - **Issue**: ~780-line class with inline `if/else` route dispatching, TV input reflection, and request parameter handling.
@@ -234,13 +228,4 @@ The following items were identified during the codebase audit and remain unaddre
 - **Issue**: Callers invoke transaction codes directly (`TX_SET_PICTURE_ITEM`, etc.) rather than semantic methods.
 - **Future Check**: Wrap in domain methods (`setWhiteBalance`, `setPictureSetting`).
 
-#### 3.20 `App.jsx` `INFO_SECTIONS` Table Size
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: 236-line presentation mapping table hardcoded in the component.
-- **Future Check**: Move to `web/src/constants/infoSections.js`.
-
-#### 3.21 `App.jsx` `formatInfoValue` Stringifies Objects into the UI
-- **File**: [`web/src/App.jsx`](file:///workspaces/xgimi-bridge/web/src/App.jsx)
-- **Issue**: `JSON.stringify(val)` is rendered directly into table cells for nested objects/arrays in "Stats for nerds".
-- **Future Check**: Format nested objects with badges or key-value sub-tables.
 
