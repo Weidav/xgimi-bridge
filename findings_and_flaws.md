@@ -55,9 +55,6 @@ This document tracks findings, architectural flaws, bugs, duplicate code, and ba
   - Click "Reload" on the integration entry. Confirm all entities refresh and no orphan timers or delayed refresh callbacks log exceptions.
 
 ### 5. Web UI Features & Offline Resilience
-- [ ] **Host Alias Access**:
-  - Access the web interface via projector IP (`http://<ip>:8080`) and any configured DNS alias.
-  - Confirm Host header validation allows valid LAN origins and rejects external DNS rebinding attempts.
 - [ ] **Telemetry & Clipboard Fallback**:
   - Open "Stats for nerds" info sheet in a mobile browser over HTTP.
   - Click "Copy JSON" and verify JSON is copied to clipboard via the fallback textarea mechanism.
@@ -124,9 +121,9 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 - **1.22 Manifest permissions (`ACCESS_NETWORK_STATE`, `SYSTEM_ALERT_WINDOW`)**:
   *Flagged as required*. Retained because Android TV OEM firmware requires `SYSTEM_ALERT_WINDOW` for background activity launch bypasses, and `ACCESS_NETWORK_STATE` is standard for network reachability checks.
 - **1.23 No authentication or CSRF protection beyond same-origin check**:
-  *Owner Decision*. Direct unauthenticated HTTP access on an isolated, trusted LAN was explicitly retained by project owner decision. Hardened against cross-origin browser drive-by attacks and DNS rebinding via canonical `Host` and `Origin` validation (`RequestPolicy`) without requiring credentials or pairing.
+  *Owner Decision*. Direct unauthenticated HTTP access on an isolated, trusted private VLAN was explicitly retained by project owner decision. Because the projector lives entirely within an isolated VLAN not accessible from the public web, strict `Host` and `Origin` filtering in `RequestPolicy` (`isHostAllowed` and `isOriginAllowed`) is set to unconditionally allow all hosts/origins. This eliminates friction and enables seamless operation behind reverse proxies (Traefik, Nginx, Caddy) and custom local domains without requiring host alias configuration.
 - **1.31 / 3.15 `LauncherActivity` programmatic UI**:
-  *Flagged as intentional / repurposed*. Retained and extended to allow on-screen configuration of LAN host aliases for `RequestPolicy` directly on the projector display without requiring terminal/ADB commands.
+  *Flagged as intentional / repurposed*. Retained to display on-screen service status and port reachability directly on the projector display without requiring terminal/ADB commands.
 - **2.8 Two incompatible HDR enum mappings**:
   *Flagged as excluded without physical hardware*. MediaTek PQ and GMUI vendor frameworks use different enum values for HDR types. Altering the mapping table without hardware verification against the specific projector firmware risks displaying incorrect video metadata.
 - **2.19 Power switch and power binary sensor expose the same state**:
@@ -444,4 +441,3 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`README.md`](file:///workspaces/xgimi-bridge/README.md)
 - **Issue**: `npm --prefix web run build && (cd app && ./build.sh && ./install.sh)` appears under both "One-liner build & deploy" and "Rebuild only the web app".
 - **Future Check**: Fix heading and document the targeted web-only build step.
-

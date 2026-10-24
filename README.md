@@ -216,11 +216,9 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
 ## Security model & isolated LAN deployment
 
 The bridge is designed for direct HTTP operation on an **isolated, trusted local network**.
-- **No API tokens, passwords, or client pairing**: Network isolation is the access boundary. Any device reachable on the local LAN may control the projector.
-- **RequestPolicy protection**: While authentication is intentionally excluded per owner deployment choice, cross-origin drive-by attacks and DNS rebinding from malicious websites are blocked:
-  - Canonical `Host` validation: Only requests naming the projector's local IP address, `localhost` (loopback), or explicitly configured local DNS aliases (e.g. configured via `LauncherActivity`) are accepted.
-  - Strict `Origin` checks: Mutations require a matching LAN origin or an absent origin (for native clients like Home Assistant and curl). Wildcard CORS is disabled.
-- **Wake security**: The wake listener on port 8081 accepts only valid `POST /wake` requests with an empty body and approved Host/Origin. Bare TCP accepts or GET requests do not wake the display.
+- **No API tokens, passwords, or client pairing**: Network isolation is the access boundary. Any device reachable on the local LAN/VLAN may control the projector.
+- **Reverse Proxy & Network Access**: To support local reverse proxies (Traefik, Nginx, Caddy), arbitrary custom domains (e.g. `https://xgimi.local.whitestoner.com/`), and HTTPS ingress without unnecessary friction on an isolated VLAN, `RequestPolicy` unconditionally admits any incoming `Host` and `Origin`.
+- **Wake security**: The wake listener on port 8081 accepts valid `POST /wake` requests with an empty body. Bare TCP accepts or GET requests do not wake the display.
 
 ## HTTP limits & error semantics
 
