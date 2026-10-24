@@ -570,8 +570,14 @@ public class ProjectorCategoryBuilder {
         put(summary, "inputSource", inputLabel);
         put(summary, "resolution", signalRes != null ? signalRes : activeDisplayMode);
         put(summary, "hdrStatus", catDisplay.optString("hdrStatus", hdrLabel));
-        put(summary, "brightnessMode", catBrightness.optString("luminancePowerMode", luminanceModeLabel)
-                + (dlpLumensLvl > 0 ? " • Lvl " + dlpLumensLvl + "/10" : ""));
+        String lumMode = catBrightness.optString("luminancePowerMode", luminanceModeLabel);
+        if (lumMode != null) {
+            put(summary, "brightnessMode", lumMode + (dlpLumensLvl > 0 ? " • Lvl " + dlpLumensLvl + "/10" : ""));
+        } else if (dlpLumensLvl > 0) {
+            put(summary, "brightnessMode", "Level " + dlpLumensLvl + "/10");
+        } else {
+            put(summary, "brightnessMode", null);
+        }
         put(summary, "pictureMode", catBrightness.optString("pictureMode", picModeLabel));
         put(summary, "audioOutput", catAudio.optString("activeOutputDevice", audioOutLabel));
         put(summary, "digitalAudioFormat", catAudio.optString("digitalOutputPassThroughFormat", digitalAudioFormatLabel));

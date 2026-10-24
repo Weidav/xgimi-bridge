@@ -285,6 +285,18 @@ public class MiniHttpTest {
                 String resp = readFullString(in);
                 assertTrue(resp.startsWith("HTTP/1.1 400"), "Absolute URI target must return 400 Bad Request");
             }
+
+            // RFC 9112 §3.2.1: Fragment in request target rejected with 400 Bad Request
+            try (Socket s = new Socket(InetAddress.getByName("127.0.0.1"), TEST_PORT)) {
+                OutputStream out = s.getOutputStream();
+                InputStream in = s.getInputStream();
+
+                String req = "GET /test#fragment HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nConnection: close\r\n\r\n";
+                out.write(req.getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+                String resp = readFullString(in);
+                assertTrue(resp.startsWith("HTTP/1.1 400"), "Fragment in request target must return 400 Bad Request");
+            }
         } finally {
             server.stop();
         }

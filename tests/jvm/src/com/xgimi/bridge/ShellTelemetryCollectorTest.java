@@ -10,6 +10,7 @@ public class ShellTelemetryCollectorTest {
     public static void main(String[] args) throws Exception {
         testParseCecDumpsys();
         testCollectHardwareInfoRunsWithoutCrashing();
+        System.out.println("  [PASS] ShellTelemetryCollectorTest");
     }
 
     private static void testParseCecDumpsys() throws Exception {

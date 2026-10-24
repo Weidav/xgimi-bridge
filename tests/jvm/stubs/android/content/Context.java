@@ -18,9 +18,18 @@ public class Context {
         return files;
     }
 
+    private android.media.tv.TvInputManager tvInputManager;
+
+    public void setTvInputManager(android.media.tv.TvInputManager tim) {
+        this.tvInputManager = tim;
+    }
+
     public Object getSystemService(String name) {
         if (POWER_SERVICE.equals(name)) {
             return new android.os.PowerManager();
+        }
+        if (TV_INPUT_SERVICE.equals(name)) {
+            return tvInputManager;
         }
         return null;
     }

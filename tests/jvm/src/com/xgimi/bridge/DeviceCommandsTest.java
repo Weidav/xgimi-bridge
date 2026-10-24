@@ -13,6 +13,7 @@ public class DeviceCommandsTest {
         testTryLockBusy();
         testPresetOrderingAndStopOnFailure();
         testPowerActionPending();
+        testConcurrentPowerActions();
         testResetPicture();
         System.out.println("  [PASS] DeviceCommandsTest");
     }
@@ -102,6 +103,41 @@ public class DeviceCommandsTest {
         assertTrue(res.httpStatus == 202, "handlePowerAction should return 202 Accepted for pending transition");
         assertTrue(res.body.optBoolean("pending"), "pending should be true");
         assertTrue(res.body.optBoolean("accepted"), "accepted should be true");
+    }
+
+    private static void testConcurrentPowerActions() throws Exception {
+        AidlClient aidl = new AidlClient();
+        LocalAdbClient adb = new LocalAdbClient(null);
+        DeviceCommands cmd = new DeviceCommands(aidl, adb);
+
+        CountDownLatch holding = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        Thread blocker = new Thread(() -> {
+            try {
+                java.lang.reflect.Method tryAcquire = DeviceCommands.class.getDeclaredMethod("tryAcquireLock");
+                tryAcquire.setAccessible(true);
+                boolean locked = (boolean) tryAcquire.invoke(cmd);
+                if (locked) {
+                    holding.countDown();
+                    release.await(2, TimeUnit.SECONDS);
+                    java.lang.reflect.Method releaseLock = DeviceCommands.class.getDeclaredMethod("releaseLock");
+                    releaseLock.setAccessible(true);
+                    releaseLock.invoke(cmd);
+                }
+            } catch (Exception ignored) {}
+        });
+        blocker.start();
+
+        assertTrue(holding.await(1, TimeUnit.SECONDS), "Blocker should acquire lock");
+        try {
+            DeviceCommands.CommandResult res = cmd.handlePowerAction("toggle", true);
+            assertTrue(res.httpStatus == 503, "Concurrent power action should return 503 busy");
+            assertTrue("busy".equals(res.body.optString("code")), "Error code should be busy");
+        } finally {
+            release.countDown();
+            blocker.join(1000);
+        }
     }
 
     private static void testResetPicture() throws Exception {

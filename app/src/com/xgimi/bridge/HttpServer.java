@@ -417,6 +417,8 @@ public class HttpServer extends MiniHttp {
             int port = Integer.parseInt(to.substring(4));
             inputService.switchToHdmi(port);
             return json(Response.Status.OK, "{\"ok\":true,\"to\":\"" + to + "\"}");
+        } catch (IllegalArgumentException e) {
+            return json(Response.Status.BAD_REQUEST, errJson("invalid_request", e.getMessage()));
         } catch (Throwable t) {
             Log.e(TAG, "Input switch failed", t);
             return json(Response.Status.INTERNAL_ERROR, errJson("internal_error", t.getMessage()));

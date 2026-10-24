@@ -12,6 +12,7 @@ public class ProjectorFormattersTest {
         testFormatEnumLookups();
         testFormatAudio();
         testFmtDouble();
+        System.out.println("  [PASS] ProjectorFormattersTest");
     }
 
     private static void testFormatInputSource() {
