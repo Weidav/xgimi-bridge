@@ -174,9 +174,41 @@ public class ProjectorFormatters {
         return formatHdrType(gTvHdrType, isPlayingHdr, gTv);
     }
 
-    public static String resolvePictureMode(int aidlPicMode, String mtkPicMode) {
+    public static boolean isFilmMakerMode(int aidlPicMode, String mtkPicMode, JSONObject mtkSettings, JSONObject gTv) {
+        if (aidlPicMode == 27) {
+            return true;
+        }
+        if (mtkSettings != null) {
+            String ct = mtkSettings.optString("Color_Temperature", "");
+            if (ct.toUpperCase(Locale.ROOT).startsWith("FMM")) {
+                return true;
+            }
+            String pm = mtkSettings.optString("Picture_Mode", "");
+            if ("FilmMaker".equalsIgnoreCase(pm) || "FMM".equalsIgnoreCase(pm)
+                    || "DolbyVisionFilmmaker".equalsIgnoreCase(pm) || "DolbyVisionIQFilmmaker".equalsIgnoreCase(pm)) {
+                return true;
+            }
+        }
+        if (mtkPicMode != null) {
+            if ("FilmMaker".equalsIgnoreCase(mtkPicMode) || "FMM".equalsIgnoreCase(mtkPicMode)
+                    || "DolbyVisionFilmmaker".equalsIgnoreCase(mtkPicMode) || "DolbyVisionIQFilmmaker".equalsIgnoreCase(mtkPicMode)) {
+                return true;
+            }
+        }
+        if (gTv != null) {
+            if (gTv.optBoolean("isFFMPlaying", false) || gTv.optInt("ffmState", 0) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static String resolvePictureMode(int aidlPicMode, String mtkPicMode, JSONObject mtkSettings, JSONObject gTv) {
         if (mtkPicMode != null && mtkPicMode.trim().toLowerCase(Locale.ROOT).startsWith("dolbyvision")) {
             return formatMtkPictureMode(mtkPicMode);
+        }
+        if (isFilmMakerMode(aidlPicMode, mtkPicMode, mtkSettings, gTv)) {
+            return formatPictureMode(27);
         }
         if (aidlPicMode >= 0) {
             return formatPictureMode(aidlPicMode);
@@ -187,6 +219,10 @@ public class ProjectorFormatters {
         return null;
     }
 
+    public static String resolvePictureMode(int aidlPicMode, String mtkPicMode) {
+        return resolvePictureMode(aidlPicMode, mtkPicMode, null, null);
+    }
+
     public static String formatMtkPictureMode(String mode) {
         if (mode == null || mode.trim().isEmpty()) return null;
         mode = mode.trim();
@@ -195,8 +231,10 @@ public class ProjectorFormatters {
         if ("DolbyVisionGame".equalsIgnoreCase(mode)) return "Dolby Vision Game";
         if ("DolbyVisionIQ".equalsIgnoreCase(mode)) return "Dolby Vision IQ";
         if ("DolbyVisionCustom".equalsIgnoreCase(mode)) return "Dolby Vision Custom";
+        if ("DolbyVisionFilmmaker".equalsIgnoreCase(mode)) return "Dolby Vision Filmmaker";
+        if ("DolbyVisionIQFilmmaker".equalsIgnoreCase(mode)) return "Dolby Vision IQ Filmmaker";
         if ("DolbyVision".equalsIgnoreCase(mode)) return "Dolby Vision";
-        if ("FilmMaker".equalsIgnoreCase(mode) || "FMM".equalsIgnoreCase(mode)) return "Filmmaker Mode";
+        if ("FilmMaker".equalsIgnoreCase(mode) || "FMM".equalsIgnoreCase(mode)) return "Filmmaker Mode (27)";
         if ("ImaxEnhanced".equalsIgnoreCase(mode)) return "IMAX Enhanced";
         if ("Standard".equalsIgnoreCase(mode) || "Natural".equalsIgnoreCase(mode)) return "Standard";
         if ("Movie".equalsIgnoreCase(mode)) return "Movie";
@@ -214,6 +252,9 @@ public class ProjectorFormatters {
         if (ct == null || ct.trim().isEmpty()) return null;
         ct = ct.trim();
         if ("FMMSDR".equalsIgnoreCase(ct)) return "Filmmaker SDR / Warm (FMMSDR)";
+        if ("FMMHDR".equalsIgnoreCase(ct)) return "Filmmaker HDR / Warm (FMMHDR)";
+        if ("FMMDOLBY".equalsIgnoreCase(ct)) return "Filmmaker Dolby / Warm (FMMDOLBY)";
+        if (ct.toUpperCase(Locale.ROOT).startsWith("FMM")) return "Filmmaker / Warm (" + ct + ")";
         if ("Warm".equalsIgnoreCase(ct)) return "Warm";
         if ("Standard".equalsIgnoreCase(ct)) return "Standard";
         if ("Cold".equalsIgnoreCase(ct) || "Cool".equalsIgnoreCase(ct)) return "Cold / Cool";

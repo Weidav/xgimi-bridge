@@ -8,8 +8,10 @@ import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
+import org.json.JSONObject;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -304,7 +306,25 @@ public class AidlClient {
     /** Snapshot of all interesting picture state. */
     public Map<String, Object> snapshot() {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("pictureMode", queryVideoInt(TX_GET_PICTURE_MODE));
+        int picMode = queryVideoInt(TX_GET_PICTURE_MODE);
+        try {
+            JSONObject pq = MtkPqClient.queryPqInfo();
+            if (pq != null) {
+                JSONObject settings = pq.optJSONObject("settings");
+                if (settings != null) {
+                    String ct = settings.optString("Color_Temperature", "");
+                    String pm = settings.optString("Picture_Mode", "");
+                    if (ct.toUpperCase(Locale.ROOT).startsWith("FMM")
+                            || "FilmMaker".equalsIgnoreCase(pm)
+                            || "FMM".equalsIgnoreCase(pm)
+                            || "DolbyVisionFilmmaker".equalsIgnoreCase(pm)
+                            || "DolbyVisionIQFilmmaker".equalsIgnoreCase(pm)) {
+                        picMode = 27;
+                    }
+                }
+            }
+        } catch (Throwable ignore) {}
+        m.put("pictureMode", picMode);
         m.put("colorTemp", queryVideoInt(TX_GET_COLOR_TEMP));
         m.put("wbRed", queryVideoInt(TX_GET_WB_RED_GAIN));
         m.put("wbGreen", queryVideoInt(TX_GET_WB_GREEN_GAIN));

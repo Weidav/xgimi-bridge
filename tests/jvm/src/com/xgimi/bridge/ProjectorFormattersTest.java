@@ -65,13 +65,21 @@ public class ProjectorFormattersTest {
         assertEquals("Dolby Vision Bright", ProjectorFormatters.resolvePictureMode(8, "DolbyVisionBright"), "mtk dv bright");
         assertEquals("Dolby Vision Game", ProjectorFormatters.resolvePictureMode(4, "DolbyVisionGame"), "mtk dv game");
 
-        // 2. Stale or non-DV MTK strings do NOT override valid AIDL picture modes
-        assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, "FilmMaker"), "aidl movie not overridden by mtk filmmaker");
+        // 2. Filmmaker Mode detection overrides stale AIDL picture modes
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(1, "FilmMaker"), "mtk filmmaker overrides aidl 1");
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(9, "FMM"), "mtk fmm overrides aidl 9");
+        org.json.JSONObject fmmSettings = new org.json.JSONObject();
+        try {
+            fmmSettings.put("Color_Temperature", "FMMSDR");
+        } catch (Throwable ignore) {}
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(9, "Sports", fmmSettings, null), "FMMSDR overrides aidl sports 9");
+
+        // 3. Stale or non-DV / non-FMM MTK strings do NOT override valid AIDL picture modes
         assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, "ImaxEnhanced"), "aidl movie not overridden by mtk imax");
         assertEquals("Standard (8)", ProjectorFormatters.resolvePictureMode(8, "User"), "aidl standard not overridden by mtk user");
         assertEquals("Vivid (0)", ProjectorFormatters.resolvePictureMode(0, "Movie"), "aidl vivid not overridden by mtk movie");
 
-        // 3. Hardware-verified AIDL modes
+        // 4. Hardware-verified AIDL modes
         assertEquals("Vivid (0)", ProjectorFormatters.resolvePictureMode(0, null), "aidl vivid");
         assertEquals("Movie (1)", ProjectorFormatters.resolvePictureMode(1, null), "aidl movie");
         assertEquals("User / Custom (3)", ProjectorFormatters.resolvePictureMode(3, null), "aidl custom");
@@ -84,9 +92,9 @@ public class ProjectorFormattersTest {
         assertEquals("ISF Night (31)", ProjectorFormatters.resolvePictureMode(31, null), "aidl isf night");
         assertEquals("Mode 99", ProjectorFormatters.resolvePictureMode(99, null), "aidl unmapped mode");
 
-        // 4. Fallback to MTK when aidlPicMode < 0
-        assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(-1, "FilmMaker"), "mtk filmmaker fallback");
-        assertEquals("Filmmaker Mode", ProjectorFormatters.resolvePictureMode(-1, "FMM"), "mtk fmm fallback");
+        // 5. Fallback to MTK when aidlPicMode < 0
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(-1, "FilmMaker"), "mtk filmmaker fallback");
+        assertEquals("Filmmaker Mode (27)", ProjectorFormatters.resolvePictureMode(-1, "FMM"), "mtk fmm fallback");
         assertEquals("IMAX Enhanced", ProjectorFormatters.resolvePictureMode(-1, "ImaxEnhanced"), "mtk imax fallback");
         assertEquals("Standard", ProjectorFormatters.resolvePictureMode(-1, "Standard"), "mtk standard fallback");
         assertEquals("Standard", ProjectorFormatters.resolvePictureMode(-1, "Natural"), "mtk natural fallback");
@@ -122,6 +130,11 @@ public class ProjectorFormattersTest {
         assertEquals("Auto / 16:9 (0)", ProjectorFormatters.formatAspectRatio(0), "aspect ratio 0");
         assertEquals("HDMI 2.1 / Enhanced (2)", ProjectorFormatters.formatEdidVersion(2), "edid 2.1");
         assertEquals("Side-by-Side (3) (3D-to-2D Active)", ProjectorFormatters.format3dMode(3, true), "3d mode");
+        assertEquals("Dolby Vision Filmmaker", ProjectorFormatters.formatMtkPictureMode("DolbyVisionFilmmaker"), "dv fmm");
+        assertEquals("Dolby Vision IQ Filmmaker", ProjectorFormatters.formatMtkPictureMode("DolbyVisionIQFilmmaker"), "dv iq fmm");
+        assertEquals("Filmmaker SDR / Warm (FMMSDR)", ProjectorFormatters.formatMtkColorTemp("FMMSDR"), "fmm sdr");
+        assertEquals("Filmmaker HDR / Warm (FMMHDR)", ProjectorFormatters.formatMtkColorTemp("FMMHDR"), "fmm hdr");
+        assertEquals("Filmmaker Dolby / Warm (FMMDOLBY)", ProjectorFormatters.formatMtkColorTemp("FMMDOLBY"), "fmm dolby");
     }
 
     private static void testFormatAudio() {

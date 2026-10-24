@@ -245,5 +245,50 @@ public class ProjectorCategoryBuilderTest {
                 ctx, aidl6, new JSONObject(), new JSONObject(),
                 new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk6);
         assertEquals("Vivid", res7.summary.optString("pictureMode"), "MTK Bright maps to Vivid");
+
+        // Case 7: User switched to Filmmaker Mode via OSD -> AIDL pictureMode has stale 9 (Sports),
+        // but MTK Color_Temperature is "FMMSDR" and Film_Mode is "On".
+        JSONObject aidl8 = new JSONObject();
+        aidl8.put("pictureMode", 9);
+        JSONObject mtk8 = new JSONObject();
+        JSONObject s8 = new JSONObject();
+        s8.put("Color_Temperature", "FMMSDR");
+        s8.put("Film_Mode", "On");
+        s8.put("Picture_Mode", "ImaxEnhanced");
+        mtk8.put("settings", s8);
+        ProjectorCategoryBuilder.CategorizedResult res8 = ProjectorCategoryBuilder.build(
+                ctx, aidl8, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk8);
+        assertEquals("Filmmaker Mode (27)", res8.summary.optString("pictureMode"), "FMMSDR overrides stale AIDL 9 in summary");
+        assertEquals("Filmmaker Mode (27)", res8.categories.getJSONObject("brightness_picture").optString("pictureMode"), "FMMSDR overrides stale AIDL 9 in brightness_picture");
+        assertEquals(true, res8.categories.getJSONObject("display").optBoolean("filmmakerModePlaying"), "FMMSDR marks filmmakerModePlaying true");
+        assertEquals("Filmmaker SDR / Warm (FMMSDR)", res8.categories.getJSONObject("brightness_picture").optString("colorTemperatureMode"), "Color temp formatted correctly");
+
+        // Case 8: HDR Filmmaker Mode -> AIDL pictureMode 1 (Movie), Color_Temperature "FMMHDR"
+        JSONObject aidl9 = new JSONObject();
+        aidl9.put("pictureMode", 1);
+        JSONObject mtk9 = new JSONObject();
+        JSONObject s9 = new JSONObject();
+        s9.put("Color_Temperature", "FMMHDR");
+        mtk9.put("settings", s9);
+        ProjectorCategoryBuilder.CategorizedResult res9 = ProjectorCategoryBuilder.build(
+                ctx, aidl9, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk9);
+        assertEquals("Filmmaker Mode (27)", res9.summary.optString("pictureMode"), "FMMHDR overrides stale AIDL 1 in summary");
+        assertEquals(true, res9.categories.getJSONObject("display").optBoolean("filmmakerModePlaying"), "FMMHDR marks filmmakerModePlaying true");
+        assertEquals("Filmmaker HDR / Warm (FMMHDR)", res9.categories.getJSONObject("brightness_picture").optString("colorTemperatureMode"), "Color temp formatted correctly");
+
+        // Case 9: Dolby Vision Filmmaker mode
+        JSONObject aidl10 = new JSONObject();
+        aidl10.put("pictureMode", 1);
+        JSONObject mtk10 = new JSONObject();
+        JSONObject s10 = new JSONObject();
+        s10.put("Picture_Mode", "DolbyVisionFilmmaker");
+        mtk10.put("settings", s10);
+        ProjectorCategoryBuilder.CategorizedResult res10 = ProjectorCategoryBuilder.build(
+                ctx, aidl10, new JSONObject(), new JSONObject(),
+                new JSONObject(), new JSONObject(), new JSONObject(), new JSONObject(), mtk10);
+        assertEquals("Dolby Vision Filmmaker", res10.summary.optString("pictureMode"), "Dolby Vision Filmmaker in summary");
+        assertEquals(true, res10.categories.getJSONObject("display").optBoolean("filmmakerModePlaying"), "Dolby Vision Filmmaker marks filmmakerModePlaying true");
     }
 }

@@ -136,9 +136,7 @@ public class ProjectorCategoryBuilder {
         }
         put(catDisplay, "dolbyVisionPicMode", dvPicModeLabel);
 
-        boolean isFfmPlaying = (picMode == 27)
-                || (gTv != null && gTv.optBoolean("isFFMPlaying", false))
-                || (picMode < 0 && ("FilmMaker".equalsIgnoreCase(mtkPicMode) || "FMM".equalsIgnoreCase(mtkPicMode)));
+        boolean isFfmPlaying = ProjectorFormatters.isFilmMakerMode(picMode, mtkPicMode, mtkSettings, gTv);
         boolean isImaxPlaying = (gTv != null && gTv.optBoolean("isImaxVideoPlaying", false))
                 || (picMode < 0 && "ImaxEnhanced".equalsIgnoreCase(mtkPicMode));
         boolean isHdrVividPlaying = (tvSourcesStatus != null && tvSourcesStatus.toUpperCase().contains("HDRVIVID"))
@@ -230,7 +228,7 @@ public class ProjectorCategoryBuilder {
         put(catBrightness, "pqPerformanceActive", "1".equals(sysPropsJson.optString("sys.xgimi.pqmode.isperf", "0")));
 
         // Picture Mode & PQ sliders
-        String picModeLabel = ProjectorFormatters.resolvePictureMode(picMode, mtkPicMode);
+        String picModeLabel = ProjectorFormatters.resolvePictureMode(picMode, mtkPicMode, mtkSettings, gTv);
         put(catBrightness, "pictureMode", picModeLabel);
 
         if (mtkSettings != null) {
