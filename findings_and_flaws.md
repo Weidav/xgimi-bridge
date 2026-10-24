@@ -32,12 +32,12 @@ This document tracks findings, architectural flaws, bugs, duplicate code, and ba
   - Confirm HTTP 400 Bad Request with `{"ok": false, "code": "invalid_request"}` is returned and hardware is unaffected.
 
 ### 3. Standby Wake & Power Transitions
-- [ ] **Standby Wake via Home Assistant**:
+- [x] **Standby Wake via Home Assistant**:
   - Put projector into standby (sleep).
   - Trigger "Turn on" in Home Assistant.
-  - Verify Home Assistant successfully sends initial UDP/TCP wake knocks (ports 8010 and 6465) followed by `POST /wake` to port 8081.
-  - Confirm projector wakes and display activates.
-- [ ] **Wake Endpoint Hardening**:
+  - Verify Home Assistant successfully sends initial WoWLAN stimulus (broadcast UDP, Wake-on-LAN Magic Packet, mDNS Cast knock, and ports 8010/6465 knocks) followed by concurrent `/wake` (8081) and `/api/power/on` (8080) probing.
+  - Confirmed on physical hardware: Projector reliably wakes in ~5.2s on first attempt; 10s power transition protection prevents UI flicker.
+- [x] **Wake Endpoint Hardening**:
   - Verify that a bare TCP connection or `GET /` to port 8081 no longer wakes the projector.
   - Verify only a valid `POST /wake` triggers the key injection.
 - [ ] **Concurrent Power Toggle Serialization**:

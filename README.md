@@ -195,17 +195,18 @@ A native custom component is included in [`homeassistant/custom_components/xgimi
    ```
 2. Restart Home Assistant.
 3. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
-4. Search for **XGIMI Bridge**, enter your projector IP (e.g. `192.168.3.17`), and click **Submit**.
+4. Search for **XGIMI Bridge**, enter your projector IP (e.g. `192.168.3.17`), and click **Submit**. (The projector's MAC address is automatically discovered from the local ARP cache once online, or can be entered manually).
 
 ### Features on the Device Page
-- **Power Switch**: Turn on from WoWLAN deep standby (automatic TCP knock + port 8081 wake) and turn off.
+- **Power Switch**: Turn on reliably from WoWLAN deep standby (multi-vector wake stimuli via Wake-on-LAN Magic Packet, Google Cast mDNS query, broadcast UDP knocks to ports 8010/6465/9/7, and shell-UID port 8081 wake) and turn off, backed by 10s optimistic transition state protection.
 - **Selects**: Input Source (`Apps`, `HDMI 1`, `HDMI 2`), Presets (dynamically populated from bridge presets), Picture Mode, Color Temperature, Game Mode.
 - **Sliders (`0–100`)**: Brightness, Contrast, Saturation, Sharpness, Hue, and White Balance R/G/B gains.
 - **Buttons**: Auto Focus, Settings Dashboard, Home, Back, Menu, Volume Up/Down/Mute, Lamp Off/On, Restart Projector.
-- **Reconfigurable in GUI**: Click **Configure** on the Device page anytime to change the IP address.
+- **Reconfigurable in GUI**: Click **Configure** on the Device page anytime to change the IP address or update the hardware MAC address.
 
 ## Notes / known quirks
 
+- **Projector Standby Setting**: In the projector's Android TV settings under **Device Preferences / Projector Settings → Power / Standby**, ensure **"Fast Boot" / "Standby Mode"** (or **"Network Standby" / "Turn on with Chromecast"**) is enabled, and **"Low Power Standby"** is disabled. If Low Power Standby is enabled, the vendor firmware shuts off electrical power to the Wi-Fi SoC after 15 minutes of inactivity, which physically prevents network wake packets from being received.
 - **WB sliders only visibly affect the picture on color-temp slot 0.** HDMI + game mode is the typical combination that lands there. Other combinations write to slot 0 successfully but you won't see the change.
 - **AIDL `switchToSignalSource` is a stub** on this firmware. The bridge instead switches HDMI inputs via `TvContract.buildChannelUriForPassthroughInput` on the root hardware `TvInputInfo`, and switches Home/Apps via `Intent.ACTION_MAIN` + `Intent.CATEGORY_HOME` (stopping `com.google.android.tv.inputplayer`).
 - **BAL bypass for the input switch** requires the `SYSTEM_ALERT_WINDOW` appop (granted by `install.sh`). The grant survives until reboot; on a fresh boot you'd need to re-run `install.sh` only if you want the cold-start input switch to work — the rest of the bridge functions normally.
