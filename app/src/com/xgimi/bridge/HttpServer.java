@@ -610,18 +610,15 @@ public class HttpServer extends MiniHttp {
         }
         String assetPath = "web/" + path;
         AssetManager am = ctx.getAssets();
-        try (InputStream is = am.open(assetPath)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
-            byte[] data = out.toByteArray();
-            Response r = newFixedLengthResponse(Response.Status.OK, mimeFor(path), data);
+        try {
+            InputStream is = am.open(assetPath);
+            long length = is.available();
+            Response r = newFixedLengthResponse(Response.Status.OK, mimeFor(path), is, length);
             if (path.startsWith("assets/")) {
                 r.addHeader("Cache-Control", "public, max-age=31536000, immutable");
             } else if (path.equals("index.html") || path.isEmpty()) {
                 r.addHeader("Cache-Control", "no-cache, must-revalidate");
-            } else if (path.endsWith(".webmanifest") || path.endsWith(".png") || path.endsWith(".svg")) {
+            } else if (path.endsWith(".webmanifest") || path.endsWith(".png") || path.endsWith(".svg") || path.endsWith(".woff2")) {
                 r.addHeader("Cache-Control", "public, max-age=86400");
             }
             return r;
@@ -637,6 +634,7 @@ public class HttpServer extends MiniHttp {
         if (path.endsWith(".json") || path.endsWith(".webmanifest")) return "application/json";
         if (path.endsWith(".png")) return "image/png";
         if (path.endsWith(".svg")) return "image/svg+xml";
+        if (path.endsWith(".woff2")) return "font/woff2";
         return "application/octet-stream";
     }
 }

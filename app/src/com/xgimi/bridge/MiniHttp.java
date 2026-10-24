@@ -134,12 +134,24 @@ public abstract class MiniHttp {
         public final Status status;
         public final String contentType;
         public final byte[] body;
+        public final InputStream dataStream;
+        public final long dataLength;
         public final Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
         public Response(Status status, String contentType, byte[] body) {
             this.status = status;
             this.contentType = contentType;
             this.body = body != null ? body : new byte[0];
+            this.dataStream = null;
+            this.dataLength = this.body.length;
+        }
+
+        public Response(Status status, String contentType, InputStream dataStream, long dataLength) {
+            this.status = status;
+            this.contentType = contentType;
+            this.body = null;
+            this.dataStream = dataStream;
+            this.dataLength = dataLength;
         }
 
         public void addHeader(String name, String value) {
@@ -873,8 +885,8 @@ public abstract class MiniHttp {
                     }
 
                     // Content-Length
-                    byte[] resBody = res.body != null ? res.body : new byte[0];
-                    out.write(("Content-Length: " + resBody.length + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                    long resLength = res.dataStream != null ? res.dataLength : (res.body != null ? res.body.length : 0);
+                    out.write(("Content-Length: " + resLength + "\r\n").getBytes(StandardCharsets.US_ASCII));
 
                     // Date
                     out.write(("Date: " + RFC1123.get().format(new Date()) + "\r\n").getBytes(StandardCharsets.US_ASCII));
@@ -898,8 +910,26 @@ public abstract class MiniHttp {
                     out.write("\r\n".getBytes(StandardCharsets.US_ASCII));
 
                     // Body: HEAD responses do NOT output body
-                    if (method != Method.HEAD && resBody.length > 0) {
-                        out.write(resBody);
+                    if (method != Method.HEAD && resLength > 0) {
+                        if (res.dataStream != null) {
+                            try (InputStream streamIn = res.dataStream) {
+                                byte[] buf = new byte[8192];
+                                long remaining = res.dataLength;
+                                while (remaining > 0) {
+                                    int toRead = (int) Math.min(buf.length, remaining);
+                                    int n = streamIn.read(buf, 0, toRead);
+                                    if (n < 0) break;
+                                    out.write(buf, 0, n);
+                                    remaining -= n;
+                                }
+                            }
+                        } else if (res.body != null) {
+                            out.write(res.body);
+                        }
+                    } else if (res.dataStream != null) {
+                        try {
+                            res.dataStream.close();
+                        } catch (IOException ignored) {}
                     }
                     out.flush();
                 } finally {
@@ -1051,21 +1081,6 @@ public abstract class MiniHttp {
         if (is == null) {
             return new Response(status, mimeType, new byte[0]);
         }
-        try (InputStream in = is) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            long remaining = totalBytes;
-            while (remaining > 0) {
-                int toRead = (int) Math.min(buf.length, remaining);
-                int n = in.read(buf, 0, toRead);
-                if (n < 0) break;
-                baos.write(buf, 0, n);
-                remaining -= n;
-            }
-            return new Response(status, mimeType, baos.toByteArray());
-        } catch (IOException e) {
-            return new Response(Response.Status.INTERNAL_ERROR, "application/json; charset=utf-8",
-                    ("{\"ok\":false,\"code\":\"internal_error\",\"error\":\"Error reading stream: " + escapeJson(e.getMessage()) + "\"}").getBytes(StandardCharsets.UTF_8));
-        }
+        return new Response(status, mimeType, is, totalBytes);
     }
 }

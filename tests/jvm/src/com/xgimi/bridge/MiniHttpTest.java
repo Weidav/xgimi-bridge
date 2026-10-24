@@ -1,5 +1,6 @@
 package com.xgimi.bridge;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -33,6 +34,7 @@ public class MiniHttpTest {
 
     public static void runAll() throws Exception {
         testNormalRequest();
+        testStreamingResponse();
         testBodyLimits();
         testChunkArithmeticAndLimits();
         testDeadlines();
@@ -60,6 +62,38 @@ public class MiniHttpTest {
                 String resp = readFullString(in);
                 assertTrue(resp.startsWith("HTTP/1.1 200 OK"), "Normal request should succeed with 200 OK");
                 assertTrue(resp.contains("OK 0"), "Body length should be 0");
+            }
+        } finally {
+            server.stop();
+        }
+    }
+
+    private static void testStreamingResponse() throws Exception {
+        MiniHttp server = new MiniHttp(TEST_PORT, MiniHttp.Limits.forPort8080()) {
+            @Override
+            protected Response serve(Request req) {
+                byte[] sample = "STREAMED_DATA_PAYLOAD_12345".getBytes(StandardCharsets.UTF_8);
+                ByteArrayInputStream bais = new ByteArrayInputStream(sample);
+                Response r = newFixedLengthResponse(Response.Status.OK, "text/plain", bais, sample.length);
+                r.addHeader("Cache-Control", "public, max-age=86400");
+                return r;
+            }
+        };
+        server.start();
+        try {
+            try (Socket s = new Socket(InetAddress.getByName("127.0.0.1"), TEST_PORT)) {
+                OutputStream out = s.getOutputStream();
+                InputStream in = s.getInputStream();
+
+                String req = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nConnection: close\r\n\r\n";
+                out.write(req.getBytes(StandardCharsets.US_ASCII));
+                out.flush();
+
+                String resp = readFullString(in);
+                assertTrue(resp.startsWith("HTTP/1.1 200 OK"), "Streaming request should succeed with 200 OK");
+                assertTrue(resp.contains("Content-Length: 27\r\n"), "Should have correct Content-Length");
+                assertTrue(resp.contains("Cache-Control: public, max-age=86400"), "Should preserve custom headers");
+                assertTrue(resp.endsWith("STREAMED_DATA_PAYLOAD_12345"), "Streamed body should match payload");
             }
         } finally {
             server.stop();

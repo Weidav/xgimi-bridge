@@ -90,6 +90,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.17** | `KeyDispatcher` Telemetry Caches Are Unsynchronized Statics | Guarded `cachedCec`, `cachedTof`, `cachedAmbient` cache accesses and refresh logic under `TELEMETRY_CACHE_LOCK`. |
 | **1.18** | `ProjectorInfoCollector` Duplicate Settings Key | Removed redundant `picture_advanced_performance_mode` from `globalStrKeys` so integer value is preserved. |
 | **1.20** | `BridgeService` lacked recovery if HTTP port failed to bind | Added bounded exponential backoff retry loop during service initialization. |
+| **1.24 / 2.27** | `serveAsset` Loads Assets Fully into Memory Per Request | Enabled streaming directly from asset `InputStream` via `MiniHttp.newFixedLengthResponse(..., InputStream, length)` with bounded 8KB socket writes, eliminating intermediate full-memory slurping. |
 | **1.25** | Ambiguous prefix-based route matching | Exact path and segment routing implemented in `HttpServer.java`. |
 | **1.26** | `MiniHttp` parsed unused query parameters and fragments | Streamlined request target parsing; rejects absolute URIs. |
 | **1.27** | `MiniHttp` chunked body parsing vulnerabilities | Hardened chunk arithmetic against integer overflow; enforced aggregate request body deadlines and byte caps. |
@@ -139,11 +140,6 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 The following items were identified during the codebase audit and remain unaddressed. They are preserved here for future refactoring, optimization, and code hygiene tasks.
 
 ### Section 1: Runtime & Environment Flaws
-
-#### 1.24 / 2.27 `serveAsset` Loads Assets Fully into Memory Per Request
-- **File**: [`app/src/com/xgimi/bridge/HttpServer.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/HttpServer.java)
-- **Flaw**: Copies web assets into a `ByteArrayOutputStream` on every cold request instead of streaming directly.
-- **Future Check**: Stream assets via `MiniHttp.newFixedLengthResponse(..., InputStream, length)` with `Cache-Control` headers.
 
 #### 1.34 Version Drift Across Deliverables
 - **Files**: `app/AndroidManifest.xml` (`0.2`), `web/package.json` (`0.0.2`), `homeassistant/custom_components/xgimi_bridge/manifest.json` (`1.0.0`), `pyproject.toml` (`0.1.0`).
