@@ -131,7 +131,11 @@ The following items from the original audit were addressed and resolved followin
 | **3.26** | `ConfigEntryNotReady` swallowed during setup | Allows Home Assistant setup retry and backoff machinery to function. |
 | **3.28** | Home Assistant config flow lacked host validation | Config flow validates host format (IP/hostname) and populates error messages. |
 | **3.31** | Home Assistant entities ignored command write failures | Entities raise `HomeAssistantError` on write failure to notify the user. |
+| **2.7 / 2.9** | Cross-Language Picture & Mode Option Duplication | Exposed dynamic `/api/enums` endpoint in `HttpServer` backed by `SettingRules.getEnumsJson()` covering picture modes, color temps, game modes, knobs, and allowed inputs. |
+| **2.10** | Keycode Tables Duplicated in Three Places | Unified keycode dictionary in `const.py` (`KEYCODES`) matching Web remote keycodes, generating HA button entities cleanly. |
+| **2.11 / 3.34** | Knob List Duplication & Positional `SLIDERS` Tuple | Exposed knob limits via `/api/enums` and refactored positional `SLIDERS` tuples into `SliderConfig(NamedTuple)` in `const.py`. |
 | **3.33** | Uncancelled delayed refresh tasks on unload | Tracked and cancelled all pending tasks in `async_unload_entry`. |
+
 
 ---
 
@@ -162,41 +166,6 @@ The following items were identified during the codebase audit and remain unaddre
 
 ---
 
-### Section 2: Code Duplication & Shared Code Opportunities
-
-#### 2.7 / 2.9 Cross-Language Picture & Mode Option Duplication
-- **Files**:
-  - `web/src/App.jsx` (`PICTURE_MODE_OPTIONS`, `COLOR_TEMP_OPTIONS`, `GAME_MODE_OPTIONS`)
-  - `homeassistant/custom_components/xgimi_bridge/const.py` (`PICTURE_MODES`, `COLOR_TEMPS`, `GAME_MODES`)
-  - `app/src/com/xgimi/bridge/ProjectorInfoCollector.java` (formatters)
-- **Issue**: Enum label mappings maintained three separate times in three languages, causing minor discrepancies (e.g. modes 0, 2, 5, 14, 18).
-- **Future Check**: Serve options dynamically from the bridge API (`GET /api/enums`) or generate from a shared schema.
-
-#### 2.10 Keycode Tables Duplicated in Three Places
-- **Files**: `web/src/App.jsx` (`KEY`), `button.py` (inline keycodes), `README.md`.
-- **Issue**: Three copies; web remote exposes `ASSIST` (219) while HA exposes `MENU` (82).
-- **Future Check**: Unify keycode mappings from a shared configuration or endpoint.
-
-#### 2.11 The Knob List is Encoded in Multiple Places
-- **Files**:
-  - `web/src/App.jsx` (`KNOBS`, `PICTURE_ITEMS`)
-  - `web/src/App.jsx` (`epToField`)
-  - `homeassistant/custom_components/xgimi_bridge/const.py` (`SLIDERS`)
-  - `app/src/com/xgimi/bridge/SettingRules.java`
-  - `app/src/com/xgimi/bridge/ProjectorInfoCollector.java`
-- **Issue**: Adding one knob requires editing multiple files across three languages. Java server-side mapping was unified in `SettingRules`, but Web and HA still maintain separate lists.
-- **Future Check**: Expose supported knobs and definitions dynamically from a bridge endpoint (e.g. `GET /api/knobs`) or shared schema.
-
-
-
-
-
-
-
-
-
-
----
 
 ### Section 3: Over-Engineered Architecture & Single-Use Micro-Functions
 
@@ -305,11 +274,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **File**: [`homeassistant/custom_components/xgimi_bridge/coordinator.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/coordinator.py)
 - **Issue**: Each successful POST triggers an immediate full coordinator refresh (`await self.async_request_refresh()`), amplifying network requests during rapid slider adjustments.
 - **Future Check**: Debounce coordinator refreshes or update `_last_data` optimistically from request payload.
-
-#### 3.34 Positional `SLIDERS` Tuple in `const.py`
-- **File**: [`homeassistant/custom_components/xgimi_bridge/const.py`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/const.py)
-- **Issue**: Uses 4-element positional tuples `(json_key, name, endpoint, icon)`.
-- **Future Check**: Refactor into a `NamedTuple` or dataclass.
 
 #### 3.35 `manifest.json` Requirements
 - **File**: [`homeassistant/custom_components/xgimi_bridge/manifest.json`](file:///workspaces/xgimi-bridge/homeassistant/custom_components/xgimi_bridge/manifest.json)

@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import XgimiEntity
-from .const import DOMAIN
+from .const import DOMAIN, KEYCODES
 from .coordinator import XgimiDataUpdateCoordinator
 
 
@@ -21,24 +21,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the XGIMI button entities."""
     coordinator: XgimiDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    key_buttons = [
+        XgimiKeyButton(coordinator, suffix, name, code, icon)
+        for suffix, (code, name, icon) in KEYCODES.items()
+    ]
     async_add_entities(
-        [
-            XgimiKeyButton(
-                coordinator, "autofocus", "Auto Focus", 140, "mdi:camera-iris"
-            ),
-            XgimiKeyButton(
-                coordinator, "settings", "Settings Dashboard", 176, "mdi:cog"
-            ),
-            XgimiKeyButton(coordinator, "home", "Home", 3, "mdi:home"),
-            XgimiKeyButton(coordinator, "back", "Back", 4, "mdi:keyboard-backspace"),
-            XgimiKeyButton(coordinator, "menu", "Menu", 82, "mdi:menu"),
-            XgimiKeyButton(
-                coordinator, "volume_up", "Volume Up", 24, "mdi:volume-high"
-            ),
-            XgimiKeyButton(
-                coordinator, "volume_down", "Volume Down", 25, "mdi:volume-medium"
-            ),
-            XgimiKeyButton(coordinator, "volume_mute", "Mute", 164, "mdi:volume-mute"),
+        key_buttons
+        + [
             XgimiPowerActionButton(
                 coordinator, "lamp_off", "Lamp Off", "led-off", "mdi:lightbulb-off"
             ),

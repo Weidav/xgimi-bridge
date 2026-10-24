@@ -117,6 +117,14 @@ public class HttpServer extends MiniHttp {
             return handleInputsEnum();
         }
 
+        // /api/enums
+        if (uri.equals("/api/enums")) {
+            if (m != Method.GET && m != Method.HEAD) {
+                return methodNotAllowed("GET, HEAD");
+            }
+            return json(Response.Status.OK, SettingRules.getEnumsJson().toString());
+        }
+
         // /api/picture
         if (uri.equals("/api/picture")) {
             if (m != Method.GET && m != Method.HEAD) {

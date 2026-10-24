@@ -11,7 +11,20 @@ public class SettingRulesTest {
         testAllowedInputs();
         testTextValidation();
         testJsonPreflight();
+        testEnumsJson();
         System.out.println("  [PASS] SettingRulesTest");
+    }
+
+    private static void testEnumsJson() {
+        JSONObject enums = SettingRules.getEnumsJson();
+        assertTrue(enums.has("pictureModes"), "Must have pictureModes");
+        assertTrue(enums.has("colorTemps"), "Must have colorTemps");
+        assertTrue(enums.has("gameModes"), "Must have gameModes");
+        assertTrue(enums.has("knobs"), "Must have knobs");
+        assertTrue(enums.has("inputs"), "Must have inputs");
+        assertTrue(enums.optJSONArray("pictureModes").length() == 5, "5 picture modes");
+        assertTrue(enums.optJSONArray("colorTemps").length() == 5, "5 color temps");
+        assertTrue(enums.optJSONArray("gameModes").length() == 3, "3 game modes");
     }
 
     private static void assertTrue(boolean condition, String msg) {

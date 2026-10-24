@@ -39,6 +39,41 @@ public class SettingRules {
                     "colorTemp", "pictureMode", "gameMode",
                     "brightness", "contrast", "saturation", "sharpness", "hue")));
 
+    public static JSONObject getEnumsJson() {
+        JSONObject obj = new JSONObject();
+        try {
+            org.json.JSONArray picModes = new org.json.JSONArray();
+            picModes.put(new JSONObject().put("value", 1).put("label", "Movie"));
+            picModes.put(new JSONObject().put("value", 9).put("label", "Football"));
+            picModes.put(new JSONObject().put("value", 6).put("label", "Office"));
+            picModes.put(new JSONObject().put("value", 4).put("label", "Game"));
+            picModes.put(new JSONObject().put("value", 3).put("label", "User"));
+            obj.put("pictureModes", picModes);
+
+            org.json.JSONArray colTemps = new org.json.JSONArray();
+            colTemps.put(new JSONObject().put("value", 0).put("label", "System"));
+            colTemps.put(new JSONObject().put("value", 1).put("label", "Warm"));
+            colTemps.put(new JSONObject().put("value", 2).put("label", "Standard"));
+            colTemps.put(new JSONObject().put("value", 3).put("label", "Cold"));
+            colTemps.put(new JSONObject().put("value", 4).put("label", "User"));
+            obj.put("colorTemps", colTemps);
+
+            org.json.JSONArray gameModes = new org.json.JSONArray();
+            gameModes.put(new JSONObject().put("value", 0).put("label", "Off"));
+            gameModes.put(new JSONObject().put("value", 1).put("label", "Standard"));
+            gameModes.put(new JSONObject().put("value", 2).put("label", "Boost"));
+            obj.put("gameModes", gameModes);
+
+            org.json.JSONArray knobs = new org.json.JSONArray();
+            for (String field : PRESET_WRITABLE_FIELDS) {
+                knobs.put(new JSONObject().put("key", field).put("min", 0).put("max", 100));
+            }
+            obj.put("knobs", knobs);
+            obj.put("inputs", new org.json.JSONArray(ALLOWED_INPUTS));
+        } catch (JSONException ignored) {}
+        return obj;
+    }
+
     private static final Map<String, String> CANONICAL_KNOB_MAP = new HashMap<>();
     static {
         CANONICAL_KNOB_MAP.put("wb-red", "wbRed");

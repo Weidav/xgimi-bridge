@@ -51,13 +51,38 @@ GAME_MODES = {
 }
 GAME_MODE_REV = {v: k for k, v in GAME_MODES.items()}
 
-SLIDERS = [
-    ("brightness", "Brightness", "brightness", "mdi:brightness-6"),
-    ("contrast", "Contrast", "contrast", "mdi:contrast-circle"),
-    ("saturation", "Saturation", "saturation", "mdi:palette"),
-    ("sharpness", "Sharpness", "sharpness", "mdi:image-filter-center-focus"),
-    ("hue", "Hue", "hue", "mdi:tune"),
-    ("wbRed", "White Balance Red Gain", "wb-red", "mdi:square-rounded"),
-    ("wbGreen", "White Balance Green Gain", "wb-green", "mdi:square-rounded"),
-    ("wbBlue", "White Balance Blue Gain", "wb-blue", "mdi:square-rounded"),
+from typing import NamedTuple
+
+
+class SliderConfig(NamedTuple):
+    """Configuration definition for a numeric slider entity."""
+
+    key: str
+    name: str
+    endpoint: str
+    icon: str
+
+
+SLIDERS: list[SliderConfig] = [
+    SliderConfig("brightness", "Brightness", "brightness", "mdi:brightness-6"),
+    SliderConfig("contrast", "Contrast", "contrast", "mdi:contrast-circle"),
+    SliderConfig("saturation", "Saturation", "saturation", "mdi:palette"),
+    SliderConfig("sharpness", "Sharpness", "sharpness", "mdi:image-filter-center-focus"),
+    SliderConfig("hue", "Hue", "hue", "mdi:tune"),
+    SliderConfig("wbRed", "White Balance Red Gain", "wb-red", "mdi:square-rounded"),
+    SliderConfig("wbGreen", "White Balance Green Gain", "wb-green", "mdi:square-rounded"),
+    SliderConfig("wbBlue", "White Balance Blue Gain", "wb-blue", "mdi:square-rounded"),
 ]
+
+# Shared keycode mapping across Web and Home Assistant
+KEYCODES: dict[str, tuple[int, str, str]] = {
+    "autofocus": (140, "Auto Focus", "mdi:camera-iris"),
+    "settings": (176, "Settings Dashboard", "mdi:cog"),
+    "home": (3, "Home", "mdi:home"),
+    "back": (4, "Back", "mdi:keyboard-backspace"),
+    "menu": (82, "Menu", "mdi:menu"),
+    "volume_up": (24, "Volume Up", "mdi:volume-high"),
+    "volume_down": (25, "Volume Down", "mdi:volume-medium"),
+    "volume_mute": (164, "Mute", "mdi:volume-mute"),
+    "assist": (219, "Assistant", "mdi:microphone"),
+}
