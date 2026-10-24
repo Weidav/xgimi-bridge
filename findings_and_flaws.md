@@ -118,6 +118,7 @@ The following items from the original audit were addressed and resolved followin
 | **2.20** | HDMI Input Reflection Duplication | Extracted `TvInputInfo` HDMI reflection into dedicated `HdmiInputHelper` utility. |
 | **2.21** | Knob list mapping duplicated in `PresetStore` and `HttpServer` | Centralized in `SettingRules` and `DeviceCommands`. |
 | **2.25** | `MiniHttp` Request/Response Redundant Getters | Removed redundant getters on `Request` and `Response` with already `public final` fields. |
+| **2.26** | `AidlClient` Standardized Transaction Pattern | Unified `AidlClient` read queries through null-safe query methods and mutation through throwing methods. |
 | **3.9** | `PresetStore` re-read file multiple times per mutation | Loads once into memory, performs atomic write replacement on commit. |
 | **3.10** | Built-in presets overwritten and unsafely mutated | Read-only loads; builtin preset edits and deletes return HTTP 403 `builtin_read_only`. |
 | **3.11** | Synchronous sleep in preset application on HTTP thread | Handled via `DeviceCommands` with pacing and non-blocking caller return. |
@@ -198,10 +199,6 @@ The following items were identified during the codebase audit and remain unaddre
 - **Future Check**: Derive dynamically from unified knob configuration.
 
 
-#### 2.26 `AidlClient` Public Getters Duplicate Its Private Helpers
-- **File**: [`app/src/com/xgimi/bridge/AidlClient.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/AidlClient.java)
-- **Issue**: `getInt`/`getString`/`getIntWithIntArg`/`setInt`/`setIntInt` are throwing variants of `callBinderInt`/`callBinderString`/etc. Two error models for the same transaction chosen ad-hoc.
-- **Future Check**: Standardize on a single transaction call pattern.
 
 #### 2.28 Dead-Code Inventory
 - `AidlClient.readSysFsViaAidl(String)`

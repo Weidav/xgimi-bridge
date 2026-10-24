@@ -232,6 +232,23 @@ public class AidlClient {
         });
     }
 
+    public Integer queryVideoInt(int code) {
+        return BinderTransact.queryInt(videoBinder.get(), DESC_VIDEO, code);
+    }
+
+    public Integer queryVideoIntWithArg(int code, final int arg) {
+        return BinderTransact.queryInt(videoBinder.get(), DESC_VIDEO, code, new BinderTransact.Writer() {
+            @Override
+            public void write(Parcel p) {
+                p.writeInt(arg);
+            }
+        });
+    }
+
+    public String queryVideoString(int code) {
+        return BinderTransact.queryString(videoBinder.get(), DESC_VIDEO, code);
+    }
+
     public boolean setInt(int code, final int value) throws RemoteException {
         return BinderTransact.transactInt(videoBinder.get(), DESC_VIDEO, code, new BinderTransact.Writer() {
             @Override
@@ -261,20 +278,19 @@ public class AidlClient {
         });
     }
 
-
     /** Snapshot of all interesting picture state. */
     public Map<String, Object> snapshot() {
         Map<String, Object> m = new LinkedHashMap<>();
-        try { m.put("pictureMode", getInt(TX_GET_PICTURE_MODE)); } catch (Throwable t) { m.put("pictureMode", null); }
-        try { m.put("colorTemp", getInt(TX_GET_COLOR_TEMP)); } catch (Throwable t) { m.put("colorTemp", null); }
-        try { m.put("wbRed", getInt(TX_GET_WB_RED_GAIN)); } catch (Throwable t) { m.put("wbRed", null); }
-        try { m.put("wbGreen", getInt(TX_GET_WB_GREEN_GAIN)); } catch (Throwable t) { m.put("wbGreen", null); }
-        try { m.put("wbBlue", getInt(TX_GET_WB_BLUE_GAIN)); } catch (Throwable t) { m.put("wbBlue", null); }
-        try { m.put("gameMode", getInt(TX_GET_GAME_MODE_OPTION)); } catch (Throwable t) { m.put("gameMode", null); }
+        m.put("pictureMode", queryVideoInt(TX_GET_PICTURE_MODE));
+        m.put("colorTemp", queryVideoInt(TX_GET_COLOR_TEMP));
+        m.put("wbRed", queryVideoInt(TX_GET_WB_RED_GAIN));
+        m.put("wbGreen", queryVideoInt(TX_GET_WB_GREEN_GAIN));
+        m.put("wbBlue", queryVideoInt(TX_GET_WB_BLUE_GAIN));
+        m.put("gameMode", queryVideoInt(TX_GET_GAME_MODE_OPTION));
 
         // Per-source detail
-        String src = null; int srcId = -1;
-        try { src = getString(TX_GET_CURRENT_INPUT_SOURCE); } catch (Throwable t) {}
+        String src = queryVideoString(TX_GET_CURRENT_INPUT_SOURCE);
+        int srcId = -1;
         m.put("currentInputSource", src);
         if (src != null) {
             if (src.equals("E_INPUT_SOURCE_STORAGE")) srcId = 0;
@@ -283,25 +299,21 @@ public class AidlClient {
             }
         }
         m.put("currentSourceId", srcId);
-        try {
-            if (srcId >= 0) m.put("gameModeCurrent", getIntWithIntArg(TX_GET_GAME_MODE_OPTION_FOR_SOURCE, srcId));
-            else m.put("gameModeCurrent", null);
-        } catch (Throwable t) { m.put("gameModeCurrent", null); }
+        m.put("gameModeCurrent", srcId >= 0 ? queryVideoIntWithArg(TX_GET_GAME_MODE_OPTION_FOR_SOURCE, srcId) : null);
 
         // Bonus: dump per-source game mode for sources 0..3 (storage + 3 HDMI)
-        java.util.LinkedHashMap<String,Object> per = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Object> per = new java.util.LinkedHashMap<>();
         for (int i = 0; i <= 3; i++) {
-            try { per.put(Integer.toString(i), getIntWithIntArg(TX_GET_GAME_MODE_OPTION_FOR_SOURCE, i)); }
-            catch (Throwable t) { per.put(Integer.toString(i), null); }
+            per.put(Integer.toString(i), queryVideoIntWithArg(TX_GET_GAME_MODE_OPTION_FOR_SOURCE, i));
         }
         m.put("gameModePerSource", per);
 
         // Picture items: 0=brightness, 1=contrast, 2=saturation, 3=sharpness, 4=hue
-        try { m.put("brightness", getIntWithIntArg(TX_GET_PICTURE_ITEM, 0)); } catch (Throwable t) { m.put("brightness", null); }
-        try { m.put("contrast",   getIntWithIntArg(TX_GET_PICTURE_ITEM, 1)); } catch (Throwable t) { m.put("contrast", null); }
-        try { m.put("saturation", getIntWithIntArg(TX_GET_PICTURE_ITEM, 2)); } catch (Throwable t) { m.put("saturation", null); }
-        try { m.put("sharpness",  getIntWithIntArg(TX_GET_PICTURE_ITEM, 3)); } catch (Throwable t) { m.put("sharpness", null); }
-        try { m.put("hue",        getIntWithIntArg(TX_GET_PICTURE_ITEM, 4)); } catch (Throwable t) { m.put("hue", null); }
+        m.put("brightness", queryVideoIntWithArg(TX_GET_PICTURE_ITEM, 0));
+        m.put("contrast",   queryVideoIntWithArg(TX_GET_PICTURE_ITEM, 1));
+        m.put("saturation", queryVideoIntWithArg(TX_GET_PICTURE_ITEM, 2));
+        m.put("sharpness",  queryVideoIntWithArg(TX_GET_PICTURE_ITEM, 3));
+        m.put("hue",        queryVideoIntWithArg(TX_GET_PICTURE_ITEM, 4));
         return m;
     }
 
