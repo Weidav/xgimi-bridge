@@ -87,6 +87,7 @@ The following items from the original audit were addressed and resolved followin
 | **1.14** | Power on/off check-then-toggle race condition | Serialized state machine in `DeviceCommands` returning HTTP 202 Accepted pending. |
 | **1.15** | `KeyDispatcher` port 8081 wake listener triggered on raw TCP connect | Replaced with bounded `WakeHttpServer` requiring `POST /wake` and `RequestPolicy` origin validation. |
 | **1.16** | Data races on `LocalAdbClient` dispatcher fields | Properly synchronized dispatcher fields with `keyLock` and `dispatcherLock`. |
+| **1.17** | `KeyDispatcher` Telemetry Caches Are Unsynchronized Statics | Guarded `cachedCec`, `cachedTof`, `cachedAmbient` cache accesses and refresh logic under `TELEMETRY_CACHE_LOCK`. |
 | **1.20** | `BridgeService` lacked recovery if HTTP port failed to bind | Added bounded exponential backoff retry loop during service initialization. |
 | **1.25** | Ambiguous prefix-based route matching | Exact path and segment routing implemented in `HttpServer.java`. |
 | **1.26** | `MiniHttp` parsed unused query parameters and fragments | Streamlined request target parsing; rejects absolute URIs. |
@@ -137,12 +138,6 @@ The following audit entries were reviewed and flagged as intentional, disproved,
 The following items were identified during the codebase audit and remain unaddressed. They are preserved here for future refactoring, optimization, and code hygiene tasks.
 
 ### Section 1: Runtime & Environment Flaws
-
-#### 1.17 `KeyDispatcher` Telemetry Caches Are Unsynchronized Statics
-- **File**: [`app/src/com/xgimi/bridge/KeyDispatcher.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/KeyDispatcher.java)
-- **Flaw**: `cachedCec`, `cachedCecTs`, `cachedTof`, `cachedAmbient`, and `cachedTofTs` are static, non-volatile fields mutated from whichever HTTP worker thread calls `/api/info`.
-- **Impact**: Concurrent telemetry queries can race and observe partially-updated cache states.
-- **Future Check**: Guard telemetry cache accesses with synchronization or `AtomicReference`.
 
 #### 1.18 `ProjectorInfoCollector` Duplicate Settings Key
 - **File**: [`app/src/com/xgimi/bridge/ProjectorInfoCollector.java`](file:///workspaces/xgimi-bridge/app/src/com/xgimi/bridge/ProjectorInfoCollector.java)

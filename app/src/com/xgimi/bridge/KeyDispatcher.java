@@ -292,6 +292,7 @@ public class KeyDispatcher {
             "Red 2 Laser/LED"
     };
 
+    private static final Object TELEMETRY_CACHE_LOCK = new Object();
     private static JSONObject cachedCec = null;
     private static long cachedCecTs = 0;
     private static Object cachedTof = null;
@@ -558,13 +559,19 @@ public class KeyDispatcher {
             putSafe(fObj, "focusPps", callNoArg(foc, "getFocusPPS"));
             putSafe(fObj, "zoomPps", callNoArg(foc, "getZoomPPS"));
             long nowFoc = System.currentTimeMillis();
-            if (cachedTof == null || (nowFoc - cachedTofTs) > 5000) {
-                cachedTof = callNoArg(foc, "getTofDistance");
-                cachedAmbient = callNoArg(foc, "getAmbientLight");
-                cachedTofTs = nowFoc;
+            Object tofVal;
+            Object ambVal;
+            synchronized (TELEMETRY_CACHE_LOCK) {
+                if (cachedTof == null || (nowFoc - cachedTofTs) > 5000) {
+                    cachedTof = callNoArg(foc, "getTofDistance");
+                    cachedAmbient = callNoArg(foc, "getAmbientLight");
+                    cachedTofTs = nowFoc;
+                }
+                tofVal = cachedTof;
+                ambVal = cachedAmbient;
             }
-            putSafe(fObj, "tofDistance", cachedTof);
-            putSafe(fObj, "ambientLight", cachedAmbient);
+            putSafe(fObj, "tofDistance", tofVal);
+            putSafe(fObj, "ambientLight", ambVal);
             putSafe(fObj, "powerOnAfEnabled", callNoArg(foc, "isPowerOnAFEnabled"));
             putSafe(fObj, "focusAutoCompensate", callNoArg(foc, "isFocusAutoCompensateEnable"));
             putSafe(fObj, "autoScreenAlign", callNoArg(foc, "getProjCurtainAdp"));
@@ -669,11 +676,15 @@ public class KeyDispatcher {
 
         // 9. HDMI CEC topology from dumpsys hdmi_control (cached for 4s)
         long now = System.currentTimeMillis();
-        if (cachedCec == null || (now - cachedCecTs) > 4000) {
-            cachedCec = parseCecDumpsys();
-            cachedCecTs = now;
+        JSONObject cecVal;
+        synchronized (TELEMETRY_CACHE_LOCK) {
+            if (cachedCec == null || (now - cachedCecTs) > 4000) {
+                cachedCec = parseCecDumpsys();
+                cachedCecTs = now;
+            }
+            cecVal = cachedCec;
         }
-        putSafe(root, "cecDumpsys", cachedCec);
+        putSafe(root, "cecDumpsys", cecVal);
         long t9 = System.currentTimeMillis();
         putSafe(timings, "cecMs", t9 - t8);
 
